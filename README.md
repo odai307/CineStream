@@ -2,6 +2,10 @@
 
 CineStream is a movie streaming-style web app built with React + Vite using live movie data from TMDB.
 
+## Live Demo
+
+https://cine-stream-rose.vercel.app/
+
 ## Tech Stack
 
 - React (Vite)
