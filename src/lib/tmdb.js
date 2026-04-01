@@ -9,11 +9,11 @@ const client = axios.create({
 });
 
 const request = async (url, params = {}) => {
-  const apiKey = import.meta.env.VITE_TMDB_KEY;
+  const apiKey = import.meta.env.TMDB_KEY;
 
   if (!apiKey || apiKey === "your_tmdb_api_key_here") {
     throw new Error(
-      "TMDB API key is missing. Set VITE_TMDB_KEY in .env and restart the Vite dev server."
+      "TMDB API key is missing. Set TMDB_KEY in .env and restart the Vite dev server."
     );
   }
 
@@ -28,7 +28,7 @@ const request = async (url, params = {}) => {
   } catch (error) {
     if (error?.response?.status === 401) {
       throw new Error(
-        "TMDB rejected the API key (401 Unauthorized). Verify VITE_TMDB_KEY in .env and restart the dev server."
+        "TMDB rejected the API key (401 Unauthorized). Verify TMDB_KEY in .env and restart the dev server."
       );
     }
     throw error;

@@ -56,7 +56,7 @@ npm install
 2. Create/update your environment file:
 
 ```env
-VITE_TMDB_KEY=your_tmdb_api_key_here
+TMDB_KEY=your_tmdb_api_key_here
 ```
 
 3. Start development server:
@@ -73,7 +73,7 @@ npm run build
 
 ## Important Note
 
-A valid TMDB API key is required. If you see `401 Unauthorized`, your `VITE_TMDB_KEY` is missing or invalid.
+A valid TMDB API key is required. If you see `401 Unauthorized`, your `TMDB_KEY` is missing or invalid.
 
 ## Routes
 
