@@ -73,6 +73,22 @@ export const searchMovies = async (query, page = 1) => {
   return data.results;
 };
 
+export const searchMulti = async (query, page = 1) => {
+  const data = await request("/search/multi", { query, page });
+  return data.results;
+};
+
+export const getDetailsByType = async (id, mediaType = "movie") => {
+  const normalizedType = mediaType === "tv" ? "tv" : "movie";
+  return request(`/${normalizedType}/${id}`);
+};
+
+export const getSimilarByType = async (id, mediaType = "movie", page = 1) => {
+  const normalizedType = mediaType === "tv" ? "tv" : "movie";
+  const data = await request(`/${normalizedType}/${id}/similar`, { page });
+  return data.results;
+};
+
 export const getByGenre = async (genreId, page = 1) => {
   const data = await request("/discover/movie", { with_genres: genreId, page });
   return data.results;
@@ -96,4 +112,15 @@ export const getPosterUrl = (path) => {
 export const getBackdropUrl = (path) => {
   if (!path) return "";
   return `${BACKDROP_BASE_URL}${path}`;
+};
+
+
+export const getTVSeasons = async (id) => {
+  const data = await request(`/tv/${id}`);
+  return data.seasons || [];
+};
+
+export const getTVEpisodes = async (id, seasonNumber) => {
+  const data = await request(`/tv/${id}/season/${seasonNumber}`);
+  return data.episodes || [];
 };

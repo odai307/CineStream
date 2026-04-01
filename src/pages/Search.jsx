@@ -25,14 +25,14 @@ function Search() {
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6 lg:px-8">
       <div className="mb-8 text-center">
-        <h1 className="brand-font text-4xl font-black">Search Movies</h1>
+        <h1 className="brand-font text-4xl font-black">Search Movies & Series</h1>
         <div className="mx-auto mt-6 w-full max-w-2xl relative">
           <input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             type="text"
-            placeholder="Search for a movie..."
+            placeholder="Search for a movie, series, or anime..."
             className="w-full rounded-xl border border-gray-700 bg-[#141414] px-6 py-5 text-center text-2xl font-semibold text-white placeholder:text-gray-500 focus:border-red-600 focus:outline-none transition-all duration-200"
           />
           <button

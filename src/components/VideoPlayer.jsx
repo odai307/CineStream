@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { getFallbackUrls } from "../lib/vidsrc";
 
-function VideoPlayer({ tmdbId }) {
-  const sources = getFallbackUrls(tmdbId);
+function VideoPlayer({ tmdbId, mediaType = "movie", season = 1, episode = 1 }) {
+  const sources = getFallbackUrls(tmdbId, mediaType, season, episode);
   const [sourceIndex, setSourceIndex] = useState(0);
 
   const tryNext = () => {
@@ -13,13 +13,13 @@ function VideoPlayer({ tmdbId }) {
 
   useEffect(() => {
     setSourceIndex(0);
-  }, [tmdbId]);
+  }, [tmdbId, mediaType, season, episode]);
 
   return (
     <div className="w-full rounded-xl bg-[#141414] p-2">
       <div className="aspect-video w-full overflow-hidden rounded-lg">
         <iframe
-          key={sourceIndex}
+          key={`${sourceIndex}-${season}-${episode}`}
           src={sources[sourceIndex]}
           title="Movie Player"
           className="h-full w-full border-0"
@@ -32,7 +32,6 @@ function VideoPlayer({ tmdbId }) {
           scrolling="no"
         />
       </div>
-
       {sourceIndex < sources.length - 1 && (
         <button
           onClick={tryNext}

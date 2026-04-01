@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { searchMovies } from "../lib/tmdb";
+import { searchMulti } from "../lib/tmdb";
 
 const useSearch = (query) => {
   const [results, setResults] = useState([]);
@@ -20,8 +20,11 @@ const useSearch = (query) => {
       try {
         setLoading(true);
         setError(null);
-        const movies = await searchMovies(normalized);
-        setResults(movies);
+        const titles = await searchMulti(normalized);
+        const filtered = titles.filter(
+          (item) => item.media_type === "movie" || item.media_type === "tv"
+        );
+        setResults(filtered);
       } catch (err) {
         setError(err.message || "Search failed. Please try again.");
       } finally {

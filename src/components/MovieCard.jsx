@@ -3,17 +3,19 @@ import { getPosterUrl } from "../lib/tmdb";
 
 function MovieCard({ movie }) {
   const synopsis = movie.overview ? movie.overview.slice(0, 100) : "No synopsis available.";
+  const mediaType = movie.media_type === "tv" ? "tv" : "movie";
+  const title = movie.title || movie.name || "Untitled";
 
   return (
     <Link
-      to={`/movie/${movie.id}`}
+      to={`/movie/${movie.id}?type=${mediaType}`}
       className="group block w-full min-w-[180px] max-w-[220px] cursor-pointer transition-all duration-200 hover:scale-105"
     >
       <div className="relative overflow-hidden rounded-xl bg-[#141414]">
         {movie.poster_path ? (
           <img
             src={getPosterUrl(movie.poster_path)}
-            alt={movie.title}
+            alt={title}
             className="aspect-[2/3] w-full object-cover"
           />
         ) : (
@@ -36,7 +38,7 @@ function MovieCard({ movie }) {
         </div>
       </div>
 
-      <h3 className="mt-3 truncate text-sm font-semibold text-white">{movie.title}</h3>
+      <h3 className="mt-3 truncate text-sm font-semibold text-white">{title}</h3>
     </Link>
   );
 }
