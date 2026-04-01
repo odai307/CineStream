@@ -1,0 +1,7 @@
+<svg width="256" height="64" viewBox="0 0 256 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="256" height="64" rx="8" fill="#0A0A0F"/>
+  <path d="M24 14H40V20H30V26H39V32H30V44H24V14Z" fill="#DC2626"/>
+  <path d="M46 14H62V20H52V26H61V32H52V38H62V44H46V14Z" fill="#DC2626"/>
+  <path d="M68 14H84V20H74V26H83V32H74V44H68V14Z" fill="#DC2626"/>
+  <text x="98" y="40" fill="white" font-family="Arial, sans-serif" font-size="28" font-weight="700">CineStream</text>
+</svg>
