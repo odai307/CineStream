@@ -1,1 +1,2 @@
-export const getEmbedUrl = (tmdbId) => `https://vidsrc.to/embed/movie/${tmdbId}`;
+export const getEmbedUrl = (tmdbId) =>
+  `https://vidsrc.me/embed/movie?tmdb=${tmdbId}`;

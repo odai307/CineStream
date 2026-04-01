@@ -7,6 +7,10 @@ function VideoPlayer({ embedUrl }) {
           title="Movie Player"
           className="h-full w-full border-0"
           allowFullScreen
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          referrerPolicy="no-referrer-when-downgrade"
+          scrolling="no"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation"
         />
       </div>
     </div>
