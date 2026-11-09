@@ -8,9 +8,9 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
+  CloseIcon,
   InfoIcon,
   NextIcon,
-  ReplayIcon,
   ServerIcon,
 } from "../components/ui/Icons";
 import { useLibrary } from "../context/LibraryContext";
@@ -27,8 +27,10 @@ import {
 } from "../lib/tmdb";
 import { watchPath } from "../lib/routes";
 
-// If a server hasn't loaded after this long, quietly move to the next one.
-const SERVER_TIMEOUT_MS = 12000;
+// Hide the intro after this long even if the provider page is still loading in the background.
+const REVEAL_AFTER_MS = 4000;
+// Only suggest another server after this long without the page finishing.
+const SLOW_HINT_AFTER_MS = 25000;
 
 // Compact "Server ▾" menu for the top bar.
 function ServerMenu({ count, current, onChange }) {
@@ -94,46 +96,51 @@ function ServerMenu({ count, current, onChange }) {
   );
 }
 
-// The player, with a cinematic loading screen and automatic server fallback.
+// The player with a short cinematic intro.
+//
+// Why no automatic server switching: an iframe's "load" event only fires once the provider's
+// whole page (nested player, ads, scripts) has finished — 20–30s on some servers — even
+// though the video is usually visible after 1–3s. Switching on a timer killed working
+// servers, so we only *suggest* another server when one is genuinely slow.
 function Player({ sources, server, onServerChange, title, subtitle, backdrop, logo }) {
-  const [loaded, setLoaded] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const [overlayGone, setOverlayGone] = useState(false);
-  const [note, setNote] = useState(null);
-  const [exhausted, setExhausted] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [slow, setSlow] = useState(false);
+  const [hintDismissed, setHintDismissed] = useState(false);
   const src = sources[server];
 
   useEffect(() => {
-    setLoaded(false);
+    setRevealed(false);
     setOverlayGone(false);
-    setExhausted(false);
-    const timer = setTimeout(() => {
-      if (server < sources.length - 1) {
-        // The note belongs to the server we switch to, so a manual pick clears it.
-        setNote({ server: server + 1, text: `Server ${server + 1} is taking too long. Switching to Server ${server + 2}…` });
-        onServerChange(server + 1);
-      } else {
-        setExhausted(true);
-      }
-    }, SERVER_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src, reloadKey]);
+    setSlow(false);
+    setHintDismissed(false);
+    // Fade the intro out once the provider's player has had time to appear, even if the
+    // page's load event is still pending.
+    const reveal = setTimeout(() => setRevealed(true), REVEAL_AFTER_MS);
+    const slowTimer = setTimeout(() => setSlow(true), SLOW_HINT_AFTER_MS);
+    return () => {
+      clearTimeout(reveal);
+      clearTimeout(slowTimer);
+    };
+  }, [src]);
+
+  useEffect(() => {
+    if (!revealed) return undefined;
+    const t = setTimeout(() => setOverlayGone(true), 800);
+    return () => clearTimeout(t);
+  }, [revealed]);
 
   const handleLoad = () => {
-    // The embed's own player needs a moment to paint after its page loads.
-    setTimeout(() => setLoaded(true), 700);
-    setTimeout(() => setOverlayGone(true), 1400);
+    setSlow(false);
+    setTimeout(() => setRevealed(true), 400);
   };
 
-  const status = exhausted
-    ? null
-    : (note?.server === server && note.text) || (server === 0 ? "Getting your stream ready…" : `Connecting to Server ${server + 1}…`);
+  const next = (server + 1) % sources.length;
 
   return (
     <div className="relative mx-auto aspect-video w-full max-w-[calc((100svh-4rem)*16/9)] overflow-hidden bg-black">
       <iframe
-        key={`${src}-${reloadKey}`}
+        key={src}
         src={src}
         title={title || "Player"}
         onLoad={handleLoad}
@@ -146,9 +153,9 @@ function Player({ sources, server, onServerChange, title, subtitle, backdrop, lo
       {!overlayGone && (
         <div
           className={`absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-black transition-opacity duration-700 ${
-            loaded ? "pointer-events-none opacity-0" : "opacity-100"
+            revealed ? "pointer-events-none opacity-0" : "opacity-100"
           }`}
-          aria-live="polite"
+          aria-hidden={revealed}
         >
           {backdrop && (
             <img
@@ -171,34 +178,39 @@ function Player({ sources, server, onServerChange, title, subtitle, backdrop, lo
               title && <h2 className="brand-font mb-3 animate-fade-in text-2xl font-extrabold text-shadow sm:text-4xl">{title}</h2>
             )}
             {subtitle && <p className="mb-6 text-sm text-white/70 sm:text-base">{subtitle}</p>}
-
-            {exhausted ? (
-              <div className="space-y-4">
-                <p className="text-sm text-white/80 sm:text-base">None of the servers are responding right now.</p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNote(null);
-                      if (server === 0) setReloadKey((k) => k + 1);
-                      else onServerChange(0);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-bold text-black transition hover:bg-white/80"
-                  >
-                    <ReplayIcon className="h-4 w-4" /> Try again
-                  </button>
-                </div>
-                <p className="text-xs text-white/45">It may be unavailable from every provider, or your connection is slow.</p>
-              </div>
-            ) : (
-              <>
-                <div className="h-1 w-48 overflow-hidden rounded-full bg-white/15 sm:w-64">
-                  <div className="h-full w-2/5 animate-loading-bar rounded-full bg-gradient-to-r from-brand to-brand-bright" />
-                </div>
-                <p className="mt-4 min-h-5 text-xs text-white/55 sm:text-sm">{status}</p>
-              </>
-            )}
+            <div className="h-1 w-48 overflow-hidden rounded-full bg-white/15 sm:w-64">
+              <div className="h-full w-2/5 animate-loading-bar rounded-full bg-gradient-to-r from-brand to-brand-bright" />
+            </div>
+            <p className="mt-4 text-xs text-white/55 sm:text-sm">
+              {server === 0 ? "Getting your stream ready…" : `Connecting to Server ${server + 1}…`}
+            </p>
           </div>
+        </div>
+      )}
+
+      {/* A gentle suggestion, never an automatic switch. */}
+      {slow && !hintDismissed && sources.length > 1 && (
+        <div
+          role="status"
+          className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 animate-pop-in items-center gap-3 rounded-full border border-white/15 bg-black/80 py-1.5 pl-4 pr-1.5 text-sm shadow-2xl backdrop-blur-md [--from-scale:0.9]"
+        >
+          <span className="whitespace-nowrap text-white/80">Slow to start?</span>
+          <button
+            type="button"
+            onClick={() => onServerChange(next)}
+            className="whitespace-nowrap rounded-full bg-white px-3 py-1 font-semibold text-black transition hover:bg-white/80"
+          >
+            Try Server {next + 1}
+          </button>
+          <button
+            type="button"
+            onClick={() => setHintDismissed(true)}
+            aria-label="Keep waiting"
+            title="Keep waiting"
+            className="rounded-full p-1 text-white/50 transition hover:bg-white/10 hover:text-white"
+          >
+            <CloseIcon className="h-4 w-4" />
+          </button>
         </div>
       )}
     </div>
