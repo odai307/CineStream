@@ -157,6 +157,9 @@ export const searchMultiRaw = async (query, page = 1) => {
   return { results: data.results || [], totalPages: data.total_pages || 1 };
 };
 
+export const searchPeople = async (query) =>
+  (await request("/search/person", { query, include_adult: false })).results || [];
+
 export const searchCollections = async (query) =>
   (await request("/search/collection", { query, include_adult: false })).results || [];
 

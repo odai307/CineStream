@@ -56,6 +56,31 @@ test("person: shah rukh khan → Starring row, no talk-show appearances", live, 
   assert.ok(!titles.includes("Kaun Banega Crorepati"));
 });
 
+test("name spellings: amir khan → Aamir Khan (not the boxer)", live, async () => {
+  const r = await smartSearch("amir khan");
+  assert.equal(r.topResult?.person?.name, "Aamir Khan");
+  assert.deepEqual(r.corrections, [{ from: "amir khan", to: "Aamir Khan" }]);
+  const titles = await firstRow(r);
+  assert.ok(titles.includes("3 Idiots") && titles.includes("Dangal"), titles.join(", "));
+});
+
+test("name spellings: dipika padukone → Deepika Padukone", live, async () => {
+  const r = await smartSearch("dipika padukone");
+  assert.equal(r.topResult?.person?.name, "Deepika Padukone");
+});
+
+test("exact names are not re-spelled: salman khan", live, async () => {
+  const r = await smartSearch("salman khan");
+  assert.equal(r.topResult?.person?.name, "Salman Khan");
+  assert.equal(r.corrections.length, 0);
+});
+
+test("thin-data actors still get a row: ramsey nouah", live, async () => {
+  const r = await smartSearch("ramsey nouah");
+  assert.equal(r.rows[0]?.title, "Starring Ramsey Nouah");
+  assert.ok((await firstRow(r)).length >= 3);
+});
+
 test("franchise: lord of the rings → collection in order", live, async () => {
   const r = await smartSearch("lord of the rings");
   assert.equal(r.rows[0].title, "The Lord of the Rings Collection");

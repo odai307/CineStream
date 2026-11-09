@@ -14,6 +14,7 @@ import {
   searchCompanies,
   searchKeywords,
   searchMultiRaw,
+  searchPeople,
 } from "../tmdb.js";
 import { getTitle } from "../format.js";
 import { normalize, similarity } from "./fuzzy.js";
@@ -125,16 +126,52 @@ const buildFilterRows = (parsed, { extra = [], extraLabels = [], keyPrefix = "ca
 
 const pickPerson = (results, text) => {
   if (!text) return null;
-  const people = results.filter((r) => r.media_type === "person" && r.profile_path);
+  const people = results.filter((r) => r.media_type === "person");
   let best = null;
   for (const p of people) {
     const score = similarity(p.name, text);
+    // People without a photo only count on an exact name match (thin data, e.g. Nollywood).
+    if (!p.profile_path && (score < 0.95 || !normalize(text).includes(" "))) continue;
     if (score >= STRONG_PERSON && (!best || score > best.score || (score === best.score && p.popularity > best.person.popularity))) {
       best = { person: p, score };
     }
   }
   return best?.person || null;
 };
+
+// Names written in English from Hindi, Arabic, Yoruba… have many spellings
+// ("Amir"/"Aamir", "Dipika"/"Deepika", "Rahul"/"Raahul"). TMDB search is exact, so
+// we try a few common spelling swaps, one change at a time.
+const SPELLING_SWAPS = [
+  [/^a(?!a)/, "aa"],
+  [/^aa/, "a"],
+  [/ee/, "i"],
+  [/i/, "ee"],
+  [/oo/, "u"],
+  [/u/, "oo"],
+  [/aa/, "a"],
+  [/w/, "v"],
+  [/v/, "w"],
+  [/ph/, "f"],
+  [/f/, "ph"],
+];
+
+export const nameVariants = (text, limit = 6) => {
+  const words = normalize(text).split(" ");
+  const out = new Set();
+  for (const [pattern, replacement] of SPELLING_SWAPS) {
+    words.forEach((word, i) => {
+      if (word.length < 3 || !pattern.test(word)) return;
+      const changed = [...words];
+      changed[i] = word.replace(pattern, replacement);
+      out.add(changed.join(" "));
+    });
+  }
+  out.delete(normalize(text));
+  return [...out].slice(0, limit);
+};
+
+const isObscurePerson = (p) => !p || (p.popularity || 0) < 0.5;
 
 const personRow = (person, parsed) => {
   const directing = person.known_for_department === "Directing";
@@ -147,8 +184,10 @@ const personRow = (person, parsed) => {
       const credits = await getPersonCredits(person.id);
       const pool = directing ? (credits.crew || []).filter((c) => c.job === "Director") : credits.cast || [];
       const seen = new Set();
-      return pool
-        .filter((t) => isTitle(t) && hasArt(t) && (t.vote_count || 0) >= 15)
+      const credible = pool.filter((t) => (t.vote_count || 0) >= 3);
+      // Actors from smaller industries often have few votes on TMDB; show everything with artwork then.
+      return (credible.length >= 6 ? credible : pool)
+        .filter((t) => isTitle(t) && hasArt(t))
         // Skip talk shows, reality, news and "as themselves" appearances.
         .filter((t) => !(t.genre_ids || []).some((g) => g === 10767 || g === 10763 || g === 10764))
         .filter((t) => !/^(self|himself|herself|themselves|host)\b|\(self\)|\bhost\b/i.test(t.character || ""))
@@ -255,13 +294,27 @@ export const smartSearch = async (query, { exact = false } = {}) => {
 
   // 2) Franchise / studio / keyword lookups on the leftover text.
   const lookups = entityText && entityText.length >= 3;
-  const [collections, companies, keywords] = await Promise.all([
+  let person = pickPerson(raw, entityText);
+  // If the only name match is obscure ("Amir Khan" the boxer), also try alternate spellings.
+  const tryVariants =
+    !exact && !strongTitle && lookups && entityText.length >= 4 && parsed.concepts.length === 0 && isObscurePerson(person);
+  const [collections, companies, keywords, variantPeople] = await Promise.all([
     lookups ? searchCollections(entityText).catch(() => []) : [],
     lookups ? searchCompanies(entityText).catch(() => []) : [],
     lookups ? searchKeywords(entityText).catch(() => []) : [],
+    tryVariants
+      ? Promise.all(nameVariants(entityText).map((v) => searchPeople(v).catch(() => []))).then((r) => r.flat())
+      : [],
   ]);
 
-  const person = pickPerson(raw, entityText);
+  const personCorrections = [];
+  const famousVariant = variantPeople
+    .filter((p) => p.profile_path && !isObscurePerson(p) && similarity(p.name, entityText) >= 0.8)
+    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
+  if (famousVariant && (!person || famousVariant.popularity > (person.popularity || 0) * 5)) {
+    person = { ...famousVariant, media_type: "person" };
+    personCorrections.push({ from: entityText, to: famousVariant.name });
+  }
   const collRows = !person ? collectionRows(collections, entityText) : [];
   const company = !person && !collRows.length ? pickCompany(companies, entityText) : null;
   const keyword = !person && !company && !collRows.length ? pickKeyword(keywords, entityText) : null;
@@ -320,7 +373,14 @@ export const smartSearch = async (query, { exact = false } = {}) => {
   // A franchise row beats a single title, unless that title is a big film in its own right ("the batman").
   const bigTitle = strongTitle && (strongTitle.vote_count || 0) >= 1000 && titleScore(strongTitle) >= 0.99;
   if (strongTitle && !fullyUnderstood && (!collRows.length || bigTitle)) topResult = { kind: "title", item: strongTitle };
-  else if (person && similarity(person.name, entityText) >= 0.95 && !parsed.hasFilters) topResult = { kind: "person", person };
+  else if (
+    person &&
+    !isObscurePerson(person) &&
+    (personCorrections.length || similarity(person.name, entityText) >= 0.95) &&
+    !parsed.hasFilters
+  ) {
+    topResult = { kind: "person", person };
+  }
 
   // ── What we understood (shown as removable chips) ──
   const chips = parsed.matches
@@ -338,7 +398,7 @@ export const smartSearch = async (query, { exact = false } = {}) => {
   return {
     query: trimmed,
     parsed,
-    corrections: parsed.corrections,
+    corrections: [...parsed.corrections, ...personCorrections],
     chips: rows.length ? chips : [],
     topResult,
     rows,

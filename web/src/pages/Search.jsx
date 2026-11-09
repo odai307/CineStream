@@ -130,8 +130,12 @@ function TopTitle({ item }) {
 function TopPerson({ person }) {
   return (
     <section className="flex items-center gap-5 rounded-xl border border-white/10 bg-surface p-5 sm:p-6">
-      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full bg-surface-3 sm:h-24 sm:w-24">
-        <img src={getProfileUrl(person.profile_path)} alt="" className="h-full w-full object-cover" />
+      <div className="brand-font flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-3 text-3xl font-bold text-white/40 sm:h-24 sm:w-24">
+        {person.profile_path ? (
+          <img src={getProfileUrl(person.profile_path)} alt="" className="h-full w-full object-cover" />
+        ) : (
+          person.name.charAt(0)
+        )}
       </div>
       <div className="min-w-0">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-bright">Top result</p>
