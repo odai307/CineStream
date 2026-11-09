@@ -33,6 +33,19 @@ npm run mobile    # Expo dev server
 - Watch page: server switcher, previous/next episode, episode list, resume from where you left off
 - Press `/` anywhere to search
 
+## Smart search
+
+Search understands more than titles (logic in `packages/core/src/search`, shared with mobile):
+
+- **Categories**: industries and countries (Bollywood, Nollywood, Ghanaian, K-Drama, anime, Turkish…), genres, moods (feel-good, romcom), studios (Marvel, Pixar, A24, Yash Raj…) and streaming services (Netflix, HBO…)
+- **Combinations**: "best bollywood comedy 2000s", "90s horror", "new turkish series"
+- **People, franchises and keywords**: "shah rukh khan" (Starring row), "lord of the rings" (collection in order), "zombie comedy"
+- **Typos in category words**: "bolywood", "anmie", "horor" (with "Search instead for…"); real titles always win ("indiana jones" is never "Indian")
+- Suggestions while typing, removable "Showing" chips, Movies/Series filter
+
+The vocabulary lives in [`lexicon.js`](packages/core/src/search/lexicon.js). Add aliases there to teach search new words.
+Run `npm test` from the repo root (offline parser tests plus live TMDB tests when `TMDB_KEY` is set).
+
 ## Accounts (optional)
 
 Everything works without an account. Guests' My List, likes and history are saved in the browser.

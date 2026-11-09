@@ -151,6 +151,23 @@ export const searchMulti = async (query, page = 1) => {
   );
 };
 
+// Raw multi search: keeps people, and returns paging info.
+export const searchMultiRaw = async (query, page = 1) => {
+  const data = await request("/search/multi", { query, page, include_adult: false });
+  return { results: data.results || [], totalPages: data.total_pages || 1 };
+};
+
+export const searchCollections = async (query) =>
+  (await request("/search/collection", { query, include_adult: false })).results || [];
+
+export const searchCompanies = async (query) => (await request("/search/company", { query })).results || [];
+
+export const searchKeywords = async (query) => (await request("/search/keyword", { query })).results || [];
+
+export const getCollection = (id) => request(`/collection/${id}`);
+
+export const getPersonCredits = (id) => request(`/person/${id}/combined_credits`);
+
 // ---------- Details ----------
 
 export const getDetailsByType = async (id, mediaType = "movie", append = []) => {

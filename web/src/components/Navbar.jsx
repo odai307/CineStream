@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { Logo } from "./ui/Controls";
 import ProfileMenu from "./ProfileMenu";
-import { ChevronDownIcon, CloseIcon, SearchIcon } from "./ui/Icons";
+import SearchBox from "./SearchBox";
+import { ChevronDownIcon } from "./ui/Icons";
 
 const LINKS = [
   { to: "/", label: "Home", end: true },
@@ -12,92 +13,6 @@ const LINKS = [
   { to: "/my-list", label: "My List" },
   { to: "/browse", label: "Browse" },
 ];
-
-function SearchBox() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [params] = useSearchParams();
-  const onSearchPage = location.pathname === "/search";
-  const [open, setOpen] = useState(onSearchPage);
-  const [value, setValue] = useState(onSearchPage ? params.get("q") || "" : "");
-  const inputRef = useRef(null);
-  const lastPath = useRef("/");
-
-  useEffect(() => {
-    if (!onSearchPage) {
-      lastPath.current = location.pathname + location.search;
-      setValue("");
-    } else {
-      setOpen(true);
-    }
-  }, [onSearchPage, location.pathname, location.search]);
-
-  // "/" focuses search from anywhere.
-  useEffect(() => {
-    const onKey = (e) => {
-      const tag = document.activeElement?.tagName;
-      if (e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT") {
-        e.preventDefault();
-        setOpen(true);
-        requestAnimationFrame(() => inputRef.current?.focus());
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  // Live search: results update as you type.
-  const update = (next) => {
-    setValue(next);
-    if (next.trim()) {
-      navigate(`/search?q=${encodeURIComponent(next)}`, { replace: onSearchPage });
-    } else if (onSearchPage) {
-      navigate("/search", { replace: true });
-    }
-  };
-
-  const clear = () => {
-    setValue("");
-    if (onSearchPage) navigate(lastPath.current || "/");
-    setOpen(false);
-  };
-
-  return (
-    <div
-      className={`flex items-center overflow-hidden rounded-md border transition-all duration-300 ${
-        open ? "w-[min(44vw,280px)] border-white/60 bg-black/75" : "w-10 border-transparent"
-      }`}
-    >
-      <button
-        type="button"
-        aria-label="Search"
-        onClick={() => {
-          setOpen(true);
-          requestAnimationFrame(() => inputRef.current?.focus());
-        }}
-        className="flex h-10 w-10 shrink-0 items-center justify-center text-white"
-      >
-        <SearchIcon className="h-5 w-5" />
-      </button>
-      <input
-        ref={inputRef}
-        value={value}
-        onChange={(e) => update(e.target.value)}
-        onKeyDown={(e) => e.key === "Escape" && clear()}
-        onBlur={() => !value && setOpen(false)}
-        placeholder="Titles, people, genres"
-        aria-label="Search titles"
-        tabIndex={open ? 0 : -1}
-        className="min-w-0 flex-1 bg-transparent py-2 text-sm text-white placeholder:text-white/50 focus:outline-none"
-      />
-      {open && value && (
-        <button type="button" aria-label="Clear search" onClick={clear} className="px-2 text-white/70 hover:text-white">
-          <CloseIcon className="h-4 w-4" />
-        </button>
-      )}
-    </div>
-  );
-}
 
 function Navbar() {
   const [scrolled, setScrolled] = useState(false);

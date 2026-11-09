@@ -34,8 +34,10 @@ function Row({ title, fetcher, items: providedItems, variant = "landscape", to }
   const { closePreview } = useMedia();
   const [page, setPage] = useState({ index: 0, count: 1, atStart: true, atEnd: false });
 
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
-    if (!fetcher || !inView || fetched) return undefined;
+    if (!fetcher || !inView || fetched || error) return undefined;
     let alive = true;
     fetcher()
       .then((list) => alive && setFetched(list.filter((t) => t.backdrop_path || t.poster_path)))
@@ -43,7 +45,7 @@ function Row({ title, fetcher, items: providedItems, variant = "landscape", to }
     return () => {
       alive = false;
     };
-  }, [fetcher, inView, fetched]);
+  }, [fetcher, inView, fetched, error, attempt]);
 
   const items = (providedItems || fetched || []).slice(0, variant === "top10" ? 10 : 20);
 
@@ -74,7 +76,29 @@ function Row({ title, fetcher, items: providedItems, variant = "landscape", to }
   };
 
   const loaded = Boolean(providedItems || fetched);
-  if ((loaded && items.length === 0) || error) return null;
+  if (loaded && items.length === 0) return null;
+
+  // A failed row stays visible with a retry, so a slow connection never looks like "no results".
+  if (error) {
+    return (
+      <section ref={sectionRef} className="gutter" aria-label={title}>
+        <h2 className="brand-font mb-2 text-base font-bold text-white/95 sm:text-lg md:text-xl lg:text-[1.4rem]">{title}</h2>
+        <div className="flex items-center gap-4 rounded-md border border-white/10 bg-surface px-4 py-6 text-sm text-white/60">
+          Couldn’t load this row.
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setAttempt((a) => a + 1);
+            }}
+            className="rounded-md bg-white/10 px-3 py-1.5 font-semibold text-white transition hover:bg-white/20"
+          >
+            Try again
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section ref={sectionRef} className="group/row relative" aria-label={title}>
