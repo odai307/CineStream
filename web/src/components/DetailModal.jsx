@@ -16,6 +16,7 @@ import {
 } from "../lib/tmdb";
 import { genrePath, resumePath } from "../lib/routes";
 import TrailerPlayer from "./TrailerPlayer";
+import TrailerTheater from "./TrailerTheater";
 import EpisodeList from "./EpisodeList";
 import {
   CircleButton,
@@ -26,7 +27,7 @@ import {
   PrimaryPlay,
   Score,
 } from "./ui/Controls";
-import { CheckIcon, CloseIcon, PlayIcon, ReplayIcon, ShareIcon, VolumeOffIcon, VolumeOnIcon } from "./ui/Icons";
+import { CheckIcon, CloseIcon, FilmIcon, PlayIcon, ReplayIcon, ShareIcon, VolumeOffIcon, VolumeOnIcon } from "./ui/Icons";
 
 function SimilarCard({ item }) {
   const { openModal } = useMedia();
@@ -96,6 +97,7 @@ function ModalContent({ id, mediaType, onClose, onRetry }) {
   const [trailerState, setTrailerState] = useState("idle");
   const [replay, setReplay] = useState(0);
   const [showAllSimilar, setShowAllSimilar] = useState(false);
+  const [theaterOpen, setTheaterOpen] = useState(false);
   const panelRef = useRef(null);
 
   useEffect(() => {
@@ -173,6 +175,7 @@ function ModalContent({ id, mediaType, onClose, onRetry }) {
 
   return (
     <div ref={panelRef} tabIndex={-1} className="outline-none">
+      <TrailerTheater open={theaterOpen} videoKey={trailerKey} title={title} onClose={() => setTheaterOpen(false)} />
       {/* Header with trailer */}
       <div className="relative aspect-video w-full overflow-hidden bg-black">
         {details.backdrop_path && (
@@ -182,6 +185,7 @@ function ModalContent({ id, mediaType, onClose, onRetry }) {
           key={`${trailerKey}-${replay}`}
           videoKey={trailerKey}
           muted={muted}
+          playing={!theaterOpen}
           startDelay={replay ? 0 : 700}
           onPlaying={() => setTrailerState("playing")}
           onEnded={() => setTrailerState("ended")}
@@ -213,6 +217,11 @@ function ModalContent({ id, mediaType, onClose, onRetry }) {
               <PrimaryPlay to={resumePath(item, progress)} label={playLabel} className="!py-2 !text-base" />
               <ListButton item={item} />
               <LikeButton item={item} />
+              {trailerKey && (
+                <CircleButton label="Watch trailer" onClick={() => setTheaterOpen(true)}>
+                  <FilmIcon />
+                </CircleButton>
+              )}
               <span className="hidden sm:inline-flex">
                 <ShareButton title={title} />
               </span>

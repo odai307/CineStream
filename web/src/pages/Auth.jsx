@@ -190,7 +190,7 @@ function Auth({ mode: initialMode }) {
           <button
             type="submit"
             disabled={busy || !email || (mode !== "reset" && !password)}
-            className="mt-6 w-full rounded-md bg-brand py-3 font-bold text-white transition hover:bg-brand-bright disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-6 w-full rounded-md bg-brand py-3 font-bold text-on-brand transition hover:bg-brand-bright disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? "Please wait…" : mode === "signin" ? "Sign In" : mode === "signup" ? "Create account" : "Send reset link"}
           </button>

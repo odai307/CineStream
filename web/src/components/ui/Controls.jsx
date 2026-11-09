@@ -17,12 +17,12 @@ export function Logo({ className = "" }) {
       <svg viewBox="0 0 64 64" className="h-[1.35em] w-[1.35em]" aria-hidden>
         <defs>
           <linearGradient id="cs-logo" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#ff3d52" />
-            <stop offset="1" stopColor="#b3122a" />
+            <stop offset="0" stopColor="#ffc14d" />
+            <stop offset="1" stopColor="#c97d0a" />
           </linearGradient>
         </defs>
         <rect width="64" height="64" rx="16" fill="url(#cs-logo)" />
-        <path d="M25 19.5v25a1.5 1.5 0 0 0 2.3 1.27l19.6-12.5a1.5 1.5 0 0 0 0-2.54L27.3 18.23A1.5 1.5 0 0 0 25 19.5Z" fill="#fff" />
+        <path d="M25 19.5v25a1.5 1.5 0 0 0 2.3 1.27l19.6-12.5a1.5 1.5 0 0 0 0-2.54L27.3 18.23A1.5 1.5 0 0 0 25 19.5Z" fill="#140f04" />
       </svg>
       <span>
         Cine<span className="text-brand-bright">Stream</span>
@@ -162,8 +162,8 @@ export function HDBadge() {
 export function Score({ vote, className = "" }) {
   if (!vote) return null;
   return (
-    <span className={`inline-flex items-center gap-1 font-semibold text-match ${className}`} title="TMDB score">
-      <StarIcon className="h-3.5 w-3.5" />
+    <span className={`inline-flex items-center gap-1 font-semibold text-white/90 ${className}`} title="TMDB score">
+      <StarIcon className="h-3.5 w-3.5 text-brand" />
       {vote.toFixed(1)}
     </span>
   );

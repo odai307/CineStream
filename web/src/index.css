@@ -7,8 +7,11 @@
   --color-surface-2: #1b1b22;
   --color-surface-3: #26262f;
   --color-muted: #a3a3ad;
-  --color-brand: #e8233a;
-  --color-brand-bright: #ff3d52;
+  /* Marquee Gold. Text on gold uses --color-on-brand (near-black) for contrast. */
+  --color-brand: #f5a524;
+  --color-brand-bright: #ffc14d;
+  --color-brand-deep: #c97d0a;
+  --color-on-brand: #140f04;
   --color-match: #46d369;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -100,7 +103,7 @@ h4,
 
 ::selection {
   background: var(--color-brand);
-  color: #fff;
+  color: var(--color-on-brand);
 }
 
 :focus-visible {

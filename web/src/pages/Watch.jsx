@@ -9,10 +9,14 @@ import {
   ChevronDownIcon,
   ChevronLeftIcon,
   CloseIcon,
+  FilmIcon,
   InfoIcon,
   NextIcon,
+  PlayIcon,
+  ReplayIcon,
   ServerIcon,
 } from "../components/ui/Icons";
+import TrailerTheater from "../components/TrailerTheater";
 import { useLibrary } from "../context/LibraryContext";
 import { useMedia } from "../context/MediaContext";
 import useTitleDetails from "../hooks/useTitleDetails";
@@ -102,12 +106,60 @@ function ServerMenu({ count, current, onChange }) {
 // whole page (nested player, ads, scripts) has finished — 20–30s on some servers — even
 // though the video is usually visible after 1–3s. Switching on a timer killed working
 // servers, so we only *suggest* another server when one is genuinely slow.
-function Player({ sources, server, onServerChange, title, subtitle, backdrop, logo }) {
+//
+// Some providers do tell the embedding page things through postMessage — notably
+// MEDIA_NOT_FOUND (this server doesn't have the title) and VS_DEVTOOLS (the provider shut its
+// player down because developer tools are open). Those are reliable, so we act on them.
+function Player({ sources, server, onServerChange, title, subtitle, backdrop, logo, onShowTrailer }) {
   const [revealed, setRevealed] = useState(false);
   const [overlayGone, setOverlayGone] = useState(false);
   const [slow, setSlow] = useState(false);
   const [hintDismissed, setHintDismissed] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const [missingOn, setMissingOn] = useState([]); // servers that reported "not found"
+  const [devtools, setDevtools] = useState(false);
+  const iframeRef = useRef(null);
   const src = sources[server];
+
+  // Listen for the provider's own status messages (only from our player frame).
+  useEffect(() => {
+    const onMessage = (event) => {
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      let data = event.data;
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      if (data?.type === "MEDIA_NOT_FOUND") {
+        setMissingOn((prev) => (prev.includes(server) ? prev : [...prev, server]));
+      } else if (data?.type === "VS_DEVTOOLS") {
+        setDevtools(true);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [server]);
+
+  // "Not found" on this server → move on to the next one that hasn't said so.
+  const allMissing = missingOn.length >= sources.length;
+  useEffect(() => {
+    if (!missingOn.includes(server) || allMissing) return undefined;
+    const nextUntried = sources.findIndex((_, i) => i > server && !missingOn.includes(i));
+    const target = nextUntried === -1 ? sources.findIndex((_, i) => !missingOn.includes(i)) : nextUntried;
+    if (target === -1) return undefined;
+    setNotice(`Server ${server + 1} doesn’t have this title. Switching to Server ${target + 1}…`);
+    const t = setTimeout(() => onServerChange(target), 1500);
+    return () => clearTimeout(t);
+  }, [missingOn, server, sources, allMissing, onServerChange]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const t = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   useEffect(() => {
     setRevealed(false);
@@ -140,6 +192,7 @@ function Player({ sources, server, onServerChange, title, subtitle, backdrop, lo
   return (
     <div className="relative mx-auto aspect-video w-full max-w-[calc((100svh-4rem)*16/9)] overflow-hidden bg-black">
       <iframe
+        ref={iframeRef}
         key={src}
         src={src}
         title={title || "Player"}
@@ -188,8 +241,57 @@ function Player({ sources, server, onServerChange, title, subtitle, backdrop, lo
         </div>
       )}
 
+      {notice && (
+        <div
+          role="status"
+          className="absolute left-1/2 top-4 z-20 -translate-x-1/2 animate-pop-in rounded-full border border-brand/40 bg-black/85 px-4 py-2 text-sm text-white/90 shadow-2xl backdrop-blur-md [--from-scale:0.9]"
+        >
+          {notice}
+        </div>
+      )}
+
+      {(devtools || allMissing) && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/90 p-6 text-center backdrop-blur-sm">
+          <div className="max-w-md space-y-4">
+            {devtools ? (
+              <>
+                <p className="brand-font text-xl font-bold">Close developer tools to play</p>
+                <p className="text-sm leading-relaxed text-white/65">
+                  This provider stops its player while developer tools (F12) are open. Close them, then reload.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="brand-font text-xl font-bold">Not available to stream yet</p>
+                <p className="text-sm leading-relaxed text-white/65">
+                  None of the servers have this title right now. New releases often appear after a few days.
+                </p>
+              </>
+            )}
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-bold text-on-brand transition hover:bg-brand-bright"
+              >
+                <ReplayIcon className="h-4 w-4" /> Reload
+              </button>
+              {onShowTrailer && (
+                <button
+                  type="button"
+                  onClick={onShowTrailer}
+                  className="inline-flex items-center gap-2 rounded-md bg-white/15 px-4 py-2 text-sm font-semibold transition hover:bg-white/25"
+                >
+                  <PlayIcon className="h-4 w-4" /> Watch the trailer
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* A gentle suggestion, never an automatic switch. */}
-      {slow && !hintDismissed && sources.length > 1 && (
+      {slow && !hintDismissed && !allMissing && !devtools && sources.length > 1 && (
         <div
           role="status"
           className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 animate-pop-in items-center gap-3 rounded-full border border-white/15 bg-black/80 py-1.5 pl-4 pr-1.5 text-sm shadow-2xl backdrop-blur-md [--from-scale:0.9]"
@@ -225,7 +327,8 @@ function Watch() {
   const location = useLocation();
   const { recordWatch } = useLibrary();
   const { openModal } = useMedia();
-  const { details, error, certification, logoPath } = useTitleDetails(id, mediaType);
+  const { details, error, certification, logoPath, trailerKey } = useTitleDetails(id, mediaType);
+  const [trailerOpen, setTrailerOpen] = useState(false);
 
   const season = Number(searchParams.get("s")) || 1;
   const episode = Number(searchParams.get("e")) || 1;
@@ -233,6 +336,19 @@ function Watch() {
   const [episodeName, setEpisodeName] = useState(null);
 
   const sources = useMemo(() => getFallbackUrls(id, mediaType, season, episode), [id, mediaType, season, episode]);
+
+  // Open connections to every server early so switching (and the first load) starts faster.
+  useEffect(() => {
+    const origins = [...new Set(sources.map((u) => new URL(u).origin))];
+    const links = origins.map((origin) => {
+      const link = document.createElement("link");
+      link.rel = "preconnect";
+      link.href = origin;
+      document.head.appendChild(link);
+      return link;
+    });
+    return () => links.forEach((l) => l.remove());
+  }, [sources]);
   useEffect(() => setServer(0), [id, season, episode]);
 
   const seasons = useMemo(
@@ -343,7 +459,9 @@ function Watch() {
         subtitle={episodeLabel || [year, length].filter(Boolean).join(" · ")}
         backdrop={details?.backdrop_path}
         logo={logoPath}
+        onShowTrailer={trailerKey ? () => setTrailerOpen(true) : null}
       />
+      <TrailerTheater open={trailerOpen} videoKey={trailerKey} title={title} onClose={() => setTrailerOpen(false)} />
 
       <div className="mx-auto max-w-6xl space-y-10 py-6 gutter">
         {mediaType === "tv" && (prevEp || nextEp) && (
@@ -398,6 +516,15 @@ function Watch() {
             <div className="flex items-center gap-2">
               <ListButton item={item} size="lg" />
               <LikeButton item={item} size="lg" />
+              {trailerKey && (
+                <button
+                  type="button"
+                  onClick={() => setTrailerOpen(true)}
+                  className="inline-flex h-12 items-center gap-2 rounded-full border-2 border-white/40 px-5 text-sm font-semibold transition hover:border-white"
+                >
+                  <FilmIcon className="h-5 w-5" /> Trailer
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => openModal(item)}

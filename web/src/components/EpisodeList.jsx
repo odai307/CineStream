@@ -111,7 +111,7 @@ function EpisodeList({ show, seasons, initialSeason, activeSeason, activeEpisode
                     </span>
                   </span>
                   {active && (
-                    <span className="absolute bottom-1 left-1 rounded-sm bg-brand px-1.5 text-[0.6rem] font-bold uppercase">
+                    <span className="absolute bottom-1 left-1 rounded-sm bg-brand px-1.5 text-[0.6rem] font-bold uppercase text-on-brand">
                       Playing
                     </span>
                   )}

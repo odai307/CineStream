@@ -119,7 +119,7 @@ function TitleCard({ item, variant = "landscape", rank }) {
         </p>
       </div>
       {fresh && (
-        <span className="absolute left-0 top-2 rounded-r-sm bg-brand px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider">
+        <span className="absolute left-0 top-2 rounded-r-sm bg-brand px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider text-on-brand">
           New
         </span>
       )}
@@ -152,7 +152,7 @@ export function ContinueCard({ item }) {
       >
         <CardImage src={backdrop} alt={title} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
-        <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white/80 bg-black/50 opacity-90 backdrop-blur-sm transition group-hover:scale-110 group-hover:bg-brand group-hover:border-brand">
+        <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white/80 bg-black/50 opacity-90 backdrop-blur-sm transition group-hover:scale-110 group-hover:bg-brand group-hover:border-brand group-hover:text-on-brand">
           <PlayIcon className="h-5 w-5 translate-x-px" />
         </span>
         <div className="absolute inset-x-0 bottom-0 p-2.5">

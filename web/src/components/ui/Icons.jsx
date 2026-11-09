@@ -137,3 +137,55 @@ export const ShareIcon = (props) => (
     <path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" />
   </svg>
 );
+
+export const PauseIcon = (props) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
+    <rect x="6" y="4.5" width="4" height="15" rx="1" />
+    <rect x="14" y="4.5" width="4" height="15" rx="1" />
+  </svg>
+);
+
+// Netflix-style circular skip arrows with the number of seconds inside.
+export const SkipBackIcon = ({ seconds = 10, ...props }) => (
+  <svg viewBox="0 0 48 48" fill="none" aria-hidden {...props}>
+    <path d="M24 8a16 16 0 1 1-14.8 9.9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    <path d="M24 2v12l-8-6 8-6Z" fill="currentColor" />
+    <text x="24" y="30" textAnchor="middle" fontSize={seconds >= 100 ? 10 : 13} fontWeight="700" fill="currentColor" fontFamily="Inter, sans-serif">
+      {seconds}
+    </text>
+  </svg>
+);
+
+export const SkipForwardIcon = ({ seconds = 10, ...props }) => (
+  <svg viewBox="0 0 48 48" fill="none" aria-hidden {...props}>
+    <path d="M24 8a16 16 0 1 0 14.8 9.9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    <path d="M24 2v12l8-6-8-6Z" fill="currentColor" />
+    <text x="24" y="30" textAnchor="middle" fontSize={seconds >= 100 ? 10 : 13} fontWeight="700" fill="currentColor" fontFamily="Inter, sans-serif">
+      {seconds}
+    </text>
+  </svg>
+);
+
+export const SettingsIcon = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+  </svg>
+);
+
+export const FullscreenIcon = ({ exit, ...props }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    {exit ? (
+      <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+    ) : (
+      <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+    )}
+  </svg>
+);
+
+export const FilmIcon = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" />
+  </svg>
+);

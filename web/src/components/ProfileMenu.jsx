@@ -30,7 +30,7 @@ function ProfileMenu() {
     return (
       <Link
         to="/login"
-        className="whitespace-nowrap rounded-md bg-brand px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-bright"
+        className="whitespace-nowrap rounded-md bg-brand px-3.5 py-1.5 text-sm font-semibold text-on-brand transition hover:bg-brand-bright"
       >
         Sign In
       </Link>

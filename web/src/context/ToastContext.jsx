@@ -39,7 +39,7 @@ export function ToastProvider({ children }) {
                 : "border-white/10 bg-surface-2/95 text-white"
             }`}
           >
-            {t.tone === "success" && <span className="h-2 w-2 shrink-0 rounded-full bg-match" />}
+            {t.tone === "success" && <span className="h-2 w-2 shrink-0 rounded-full bg-brand" />}
             {t.tone === "error" && <span className="h-2 w-2 shrink-0 rounded-full bg-red-400" />}
             {t.message}
             <button
