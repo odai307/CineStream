@@ -1,89 +1,51 @@
 # CineStream
 
-CineStream is a movie streaming-style web app built with React + Vite using live movie data from TMDB.
+A streaming-style app for browsing movies and series with live data from TMDB.
 
-## Live Demo
+- **web/**: React + Vite + Tailwind (deployed on Vercel): https://cine-stream-rose.vercel.app/
+- **mobile/**: React Native + Expo (iOS / Android)
+- **packages/core/**: shared, platform-agnostic logic used by both apps (TMDB client, stream sources, formatting helpers). Zero dependencies; uses `fetch`.
 
-https://cine-stream-rose.vercel.app/
+The UI layers are separate because the web renders HTML/CSS and React Native renders native views. Everything that isn't UI lives in `packages/core`, so an API fix only has to be made once.
 
-## Tech Stack
+## Getting started
 
-- React (Vite)
-- React Router v6
-- Tailwind CSS
-- Axios
-- JavaScript (no TypeScript)
+```bash
+# 1. API key (get one free at https://www.themoviedb.org/settings/api)
+cp .env.example .env                 # web reads TMDB_KEY from the repo-root .env
+cp mobile/.env.example mobile/.env   # mobile reads EXPO_PUBLIC_TMDB_KEY
 
-## Features
+# 2. Install both apps (each links packages/core via "file:../packages/core")
+npm run install:all
 
-- Home page with hero banner and movie rows (Trending, Top Rated, New Releases, Popular)
-- Browse page with genre filtering, sorting, and load more
-- Watch page with embedded player and similar movies
-- Movie info page with cast, director, trailer, and watch CTA
-- Search page with URL-based query and debounced search
-- Genre page with genre hero strip, sorting, and pagination
-- Reusable ad placeholders for future AdSense integration
+# 3. Run
+npm run dev       # web on http://localhost:5173
+npm run mobile    # Expo dev server
+```
 
-## Project Structure
+## Web features
+
+- Cinematic billboard that auto-plays the trailer (muted) behind the title logo, with mute/replay; pauses when scrolled away, when the tab is hidden, or when something else plays
+- **Hover previews**: hover a title and the card expands to play its trailer, with Play / My List / Like / More Info
+- Detail modal (shareable via `?title=<id>&type=movie|tv`) with trailer, episodes, "More Like This", cast and details
+- Rows: Continue Watching, Top 10 Movies/Series, trending, genre collections, anime, K-dramas, coming soon
+- Pages: Home, Series, Movies (with genre menu), New & Popular, Browse (format/genre/sort with infinite scroll), Genre, Search (live, with Top Searches), My List
+- Watch page: server switcher, previous/next episode, episode list, resume from where you left off
+- My List, likes, and watch history are saved in the browser (localStorage)
+- Press `/` anywhere to search
+
+## Project structure
 
 ```text
-cinestream/
-├── public/
-├── src/
-│   ├── pages/
-│   ├── components/
-│   ├── lib/
-│   ├── hooks/
-│   ├── App.jsx
-│   ├── main.jsx
-│   └── index.css
-├── .env
-├── .gitignore
-├── README.md
-├── vite.config.js
-├── tailwind.config.js
-└── package.json
+CineStream/
+├── packages/core/src/   tmdb.js · vidsrc.js · format.js
+├── web/src/
+│   ├── components/      Hero, Row, TitleCard, PreviewPopup, DetailModal, TrailerPlayer, …
+│   ├── context/         LibraryContext (list/likes/history), MediaContext (mute/preview/modal)
+│   ├── hooks/           useTitleDetails, useInView, useSearch
+│   ├── lib/             tmdb.js (configures core), catalog.js (row fetchers), routes.js
+│   └── pages/           Home, TypeHome, NewPopular, Catalog, Search, MyList, Watch, NotFound
+└── mobile/src/          screens, navigation, lib/ (configures core)
 ```
 
-## Getting Started
-
-1. Install dependencies:
-
-```bash
-npm install
-```
-
-2. Create/update your environment file:
-
-```env
-TMDB_KEY=your_tmdb_api_key_here
-```
-
-3. Start development server:
-
-```bash
-npm run dev
-```
-
-4. Build for production:
-
-```bash
-npm run build
-```
-
-## Important Note
-
-A valid TMDB API key is required. If you see `401 Unauthorized`, your `TMDB_KEY` is missing or invalid.
-
-## Routes
-
-- `/` Home
-- `/browse` Browse
-- `/movie/:id` Watch
-- `/movie/:id/info` Movie Info
-- `/search?q=batman` Search
-- `/genre/:name` Genre
-
-## License
-
-Personal/educational use unless you add your own license.
+Title data and images by TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.

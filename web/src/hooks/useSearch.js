@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { searchMulti } from "../lib/tmdb";
 
-const useSearch = (query) => {
+const useSearch = (query, delay = 350) => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -13,27 +13,28 @@ const useSearch = (query) => {
       setResults([]);
       setLoading(false);
       setError(null);
-      return;
+      return undefined;
     }
 
+    let alive = true;
+    setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        setLoading(true);
         setError(null);
         const titles = await searchMulti(normalized);
-        const filtered = titles.filter(
-          (item) => item.media_type === "movie" || item.media_type === "tv"
-        );
-        setResults(filtered);
+        if (alive) setResults(titles.filter((t) => t.backdrop_path || t.poster_path));
       } catch (err) {
-        setError(err.message || "Search failed. Please try again.");
+        if (alive) setError(err.message || "Search failed. Please try again.");
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
-    }, 500);
+    }, delay);
 
-    return () => clearTimeout(timer);
-  }, [query]);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [query, delay]);
 
   return { results, loading, error };
 };

@@ -1,0 +1,11 @@
+{
+  "name": "cinestream-monorepo",
+  "private": true,
+  "description": "CineStream web (Vite) + mobile (Expo), sharing logic via packages/core.",
+  "scripts": {
+    "install:all": "npm install --prefix web && npm install --prefix mobile",
+    "dev": "npm run dev --prefix web",
+    "build": "npm run build --prefix web",
+    "mobile": "npm run start --prefix mobile"
+  }
+}

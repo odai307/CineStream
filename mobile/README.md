@@ -11,7 +11,7 @@ This is the React Native mobile app workspace for CineStream.
 
 ## Setup
 
-1. Install dependencies:
+1. Install dependencies (this also links the shared `packages/core`):
 
 ```bash
 cd mobile
