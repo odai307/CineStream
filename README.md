@@ -31,8 +31,21 @@ npm run mobile    # Expo dev server
 - Rows: Continue Watching, Top 10 Movies/Series, trending, genre collections, anime, K-dramas, coming soon
 - Pages: Home, Series, Movies (with genre menu), New & Popular, Browse (format/genre/sort with infinite scroll), Genre, Search (live, with Top Searches), My List
 - Watch page: server switcher, previous/next episode, episode list, resume from where you left off
-- My List, likes, and watch history are saved in the browser (localStorage)
 - Press `/` anywhere to search
+
+## Accounts (optional)
+
+Everything works without an account. Guests' My List, likes and history are saved in the browser.
+Signing in (Supabase Auth, email + password) adds:
+
+- Up to 5 profiles per account with a "Who's watching?" picker; each profile has its own list, likes, history and recommendations
+- Sync across devices; guest data is merged into the chosen profile on sign-in
+- "Top Picks for You" and "Because you watched X" rows
+- Account page: change/reset password, sign out, delete account
+
+Setup: create a Supabase project, put `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the publishable key) in the root `.env`,
+then run [`supabase/migrations/20261109000000_profiles_and_library.sql`](supabase/migrations/20261109000000_profiles_and_library.sql) in the SQL Editor.
+Row Level Security limits every user to their own data. Never put the secret/service_role key in `.env`; anything prefixed `VITE_` ships to the browser.
 
 ## Project structure
 

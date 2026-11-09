@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Logo } from "./ui/Controls";
+import ProfileMenu from "./ProfileMenu";
 import { ChevronDownIcon, CloseIcon, SearchIcon } from "./ui/Icons";
 
 const LINKS = [
@@ -64,7 +65,7 @@ function SearchBox() {
   return (
     <div
       className={`flex items-center overflow-hidden rounded-md border transition-all duration-300 ${
-        open ? "w-[min(62vw,280px)] border-white/60 bg-black/75" : "w-10 border-transparent"
+        open ? "w-[min(44vw,280px)] border-white/60 bg-black/75" : "w-10 border-transparent"
       }`}
     >
       <button
@@ -180,8 +181,9 @@ function Navbar() {
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3 sm:gap-4">
           <SearchBox />
+          <ProfileMenu />
         </div>
       </div>
     </header>
