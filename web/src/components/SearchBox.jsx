@@ -156,10 +156,21 @@ function SearchBox() {
     }`;
 
   return (
-    <div ref={wrapRef} className="relative">
+    // On phones the open search becomes a full-width bar over the navbar (there isn't room
+    // beside the logo and menu); from the "sm" breakpoint up it expands in place.
+    <div
+      ref={wrapRef}
+      className={`relative ${
+        expanded
+          ? "max-sm:fixed max-sm:inset-x-0 max-sm:top-0 max-sm:z-[55] max-sm:flex max-sm:h-16 max-sm:items-center max-sm:gap-3 max-sm:bg-ink max-sm:px-4"
+          : ""
+      }`}
+    >
       <div
         className={`flex items-center overflow-hidden rounded-md border transition-all duration-300 ${
-          expanded ? "w-[min(44vw,300px)] border-white/60 bg-black/75" : "w-10 border-transparent"
+          expanded
+            ? "w-[min(44vw,300px)] border-white/60 bg-black/75 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1"
+            : "w-10 border-transparent"
         }`}
       >
         <button
@@ -192,20 +203,38 @@ function SearchBox() {
           aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
           autoComplete="off"
           tabIndex={expanded ? 0 : -1}
-          className="min-w-0 flex-1 bg-transparent py-2 text-sm text-white placeholder:text-white/50 focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent py-2 text-base text-white placeholder:text-white/50 focus:outline-none sm:text-sm"
         />
         {expanded && value && (
-          <button type="button" aria-label="Clear search" onClick={clear} className="px-2 text-white/70 hover:text-white">
+          <button
+            type="button"
+            aria-label="Clear search text"
+            onClick={() => {
+              setValue("");
+              inputRef.current?.focus();
+            }}
+            className="px-2 text-white/70 hover:text-white sm:hidden"
+          >
+            <CloseIcon className="h-4 w-4" />
+          </button>
+        )}
+        {expanded && value && (
+          <button type="button" aria-label="Clear search" onClick={clear} className="hidden px-2 text-white/70 hover:text-white sm:block">
             <CloseIcon className="h-4 w-4" />
           </button>
         )}
       </div>
+      {expanded && (
+        <button type="button" onClick={clear} className="shrink-0 text-sm font-semibold text-white/80 hover:text-white sm:hidden">
+          Cancel
+        </button>
+      )}
 
       {showPanel && (
         <div
           id={listId}
           role="listbox"
-          className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,400px)] animate-fade-in overflow-hidden rounded-lg border border-white/10 bg-ink/95 py-2 shadow-2xl backdrop-blur-xl"
+          className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,400px)] animate-fade-in overflow-hidden rounded-lg border border-white/10 bg-ink/95 py-2 shadow-2xl backdrop-blur-xl max-sm:left-0 max-sm:mt-0 max-sm:max-h-[calc(100vh-4rem)] max-sm:w-auto max-sm:overflow-y-auto max-sm:rounded-none max-sm:border-x-0"
         >
           {results.categories.length > 0 && (
             <p className="px-3 pb-1 pt-1 text-[0.65rem] font-semibold uppercase tracking-widest text-white/40">Explore</p>
@@ -291,8 +320,10 @@ function SearchBox() {
               onClick={() => submit()}
               className={`${optionClass(allIndex)} text-sm text-white/80`}
             >
-              <SearchIcon className="h-4 w-4 text-white/50" />
-              See all results for “<span className="truncate font-semibold text-white">{value.trim()}</span>”
+              <SearchIcon className="h-4 w-4 shrink-0 text-white/50" />
+              <span className="min-w-0 truncate">
+                See all results for “<span className="font-semibold text-white">{value.trim()}</span>”
+              </span>
             </button>
           </div>
         </div>
