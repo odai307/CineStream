@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Logo } from "./ui/Controls";
+import { InstallAppButton, Logo } from "./ui/Controls";
 
 const columns = [
   [
@@ -23,9 +23,12 @@ function Footer() {
   return (
     <footer className="mt-20 border-t border-white/[0.06] py-12 text-sm text-white/50 gutter">
       <div className="mx-auto max-w-5xl">
-        <Link to="/" className="text-lg text-white/90">
-          <Logo />
-        </Link>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <Link to="/" className="text-lg text-white/90">
+            <Logo />
+          </Link>
+          <InstallAppButton />
+        </div>
         <div className="mt-8 grid grid-cols-2 gap-6 sm:grid-cols-3">
           {columns.map((col, i) => (
             <ul key={i} className="space-y-3">

@@ -19,3 +19,20 @@ export const getFallbackUrls = (tmdbId, mediaType = "movie", season = 1, episode
 
 export const getEmbedUrl = (tmdbId, mediaType = "movie", season = 1, episode = 1) =>
   getFallbackUrls(tmdbId, mediaType, season, episode)[0];
+
+// Download sources by TMDB ID (movies and individual TV episodes).
+export const getDownloadUrls = (tmdbId, mediaType = "movie", season = 1, episode = 1) => {
+  if (mediaType === "tv") {
+    return [
+      `https://dl.vidsrc.vip/tv/${tmdbId}/${season}/${episode}`,
+      `https://multiembed.mov/directstream.php?video_id=${tmdbId}&tmdb=1&s=${season}&e=${episode}`,
+    ];
+  }
+  return [
+    `https://dl.vidsrc.vip/movie/${tmdbId}`,
+    `https://multiembed.mov/directstream.php?video_id=${tmdbId}&tmdb=1`,
+  ];
+};
+
+export const getDownloadUrl = (tmdbId, mediaType = "movie", season = 1, episode = 1) =>
+  getDownloadUrls(tmdbId, mediaType, season, episode)[0];

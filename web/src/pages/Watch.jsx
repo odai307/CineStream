@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import EpisodeList from "../components/EpisodeList";
 import Row from "../components/Row";
-import { LikeButton, ListButton, MaturityBadge, Score } from "../components/ui/Controls";
+import { DownloadButton, LikeButton, ListButton, MaturityBadge, Score } from "../components/ui/Controls";
 import {
   ArrowLeftIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   CloseIcon,
+  DownloadIcon,
   FilmIcon,
   InfoIcon,
   NextIcon,
@@ -23,6 +24,7 @@ import useTitleDetails from "../hooks/useTitleDetails";
 import {
   formatRuntime,
   getBackdropUrl,
+  getDownloadUrl,
   getFallbackUrls,
   getLogoUrl,
   getTitle,
@@ -439,6 +441,17 @@ function Watch() {
           {episodeLabel && <p className="truncate text-xs text-white/60 md:text-sm">{episodeLabel}</p>}
         </div>
         <ServerMenu count={sources.length} current={server} onChange={setServer} />
+        <a
+          href={getDownloadUrl(id, mediaType, season, episode)}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={mediaType === "tv" ? `Download S${season}:E${episode}` : "Download"}
+          title={mediaType === "tv" ? `Download S${season}:E${episode}` : "Download"}
+          className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
+        >
+          <DownloadIcon className="h-4 w-4" />
+          <span className="hidden sm:inline">Download</span>
+        </a>
         {nextEp && (
           <button
             type="button"
@@ -513,9 +526,10 @@ function Watch() {
                 Not playing? Use the <span className="font-semibold text-white/60">Server</span> menu at the top to switch providers.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <ListButton item={item} size="lg" />
               <LikeButton item={item} size="lg" />
+              <DownloadButton item={item} season={season} episode={episode} variant="pill" />
               {trailerKey && (
                 <button
                   type="button"

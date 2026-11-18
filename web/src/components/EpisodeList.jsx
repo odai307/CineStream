@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getStillUrl, getTVEpisodes } from "../lib/tmdb";
 import { watchPath } from "../lib/routes";
+import { DownloadButton } from "./ui/Controls";
 import { ChevronDownIcon, PlayIcon } from "./ui/Icons";
 
 export function SeasonSelect({ seasons, value, onChange, className = "" }) {
@@ -75,7 +76,12 @@ function EpisodeList({ show, seasons, initialSeason, activeSeason, activeEpisode
           const active = activeSeason === season && activeEpisode === ep.episode_number;
           const to = watchPath({ ...show, media_type: "tv" }, { season, episode: ep.episode_number });
           return (
-            <li key={ep.id}>
+            <li
+              key={ep.id}
+              className={`group flex items-center gap-2 pr-3 transition sm:pr-4 ${
+                active ? "bg-white/10" : "hover:bg-white/[0.06]"
+              }`}
+            >
               <Link
                 to={to}
                 onClick={(e) => {
@@ -85,9 +91,7 @@ function EpisodeList({ show, seasons, initialSeason, activeSeason, activeEpisode
                   }
                 }}
                 aria-current={active ? "true" : undefined}
-                className={`group flex items-start gap-3 p-3 transition sm:gap-4 sm:p-4 ${
-                  active ? "bg-white/10" : "hover:bg-white/[0.06]"
-                }`}
+                className="flex min-w-0 flex-1 items-start gap-3 p-3 sm:gap-4 sm:p-4"
               >
                 <span className="hidden w-6 shrink-0 pt-6 text-center text-xl font-semibold text-white/50 sm:block">
                   {ep.episode_number}
@@ -129,6 +133,13 @@ function EpisodeList({ show, seasons, initialSeason, activeSeason, activeEpisode
                   </p>
                 </div>
               </Link>
+              <DownloadButton
+                item={{ ...show, media_type: "tv" }}
+                season={season}
+                episode={ep.episode_number}
+                size="sm"
+                label={`Download S${season}:E${ep.episode_number}${ep.name ? ` · ${ep.name}` : ""}`}
+              />
             </li>
           );
         })}

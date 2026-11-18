@@ -20,6 +20,7 @@ import TrailerTheater from "./TrailerTheater";
 import EpisodeList from "./EpisodeList";
 import {
   CircleButton,
+  DownloadButton,
   HDBadge,
   LikeButton,
   ListButton,
@@ -213,10 +214,15 @@ function ModalContent({ id, mediaType, onClose, onRetry }) {
             ) : (
               <h2 className="brand-font mb-4 text-2xl font-extrabold leading-tight text-shadow sm:mb-6 sm:text-4xl">{title}</h2>
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <PrimaryPlay to={resumePath(item, progress)} label={playLabel} className="!py-2 !text-base" />
               <ListButton item={item} />
               <LikeButton item={item} />
+              <DownloadButton
+                item={item}
+                season={progress?.season || seasons[0]?.season_number || 1}
+                episode={progress?.episode || 1}
+              />
               {trailerKey && (
                 <CircleButton label="Watch trailer" onClick={() => setTheaterOpen(true)}>
                   <FilmIcon />

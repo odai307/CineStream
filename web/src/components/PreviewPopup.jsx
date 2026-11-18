@@ -15,6 +15,7 @@ import { resumePath } from "../lib/routes";
 import TrailerPlayer from "./TrailerPlayer";
 import {
   CircleButton,
+  DownloadButton,
   HDBadge,
   LikeButton,
   ListButton,
@@ -163,6 +164,11 @@ function PreviewCard({ item, rect, onClose }) {
           <PlayButton to={resumePath(merged, progress)} label={progress ? "Resume" : "Play"} />
           <ListButton item={merged} />
           <LikeButton item={merged} />
+          <DownloadButton
+            item={merged}
+            season={progress?.season || 1}
+            episode={progress?.episode || 1}
+          />
           <CircleButton label="More info" className="ml-auto" onClick={() => openModal(merged)}>
             <ChevronDownIcon />
           </CircleButton>

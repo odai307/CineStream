@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { getDetailsByType, getTVEpisodes, getTVSeasons } from "../lib/tmdb";
-import { getEmbedUrl } from "../lib/vidsrc";
+import { getDownloadUrl, getEmbedUrl } from "../lib/vidsrc";
 
 function WatchScreen({ route }) {
   const { id, mediaType = "movie", title: routeTitle } = route.params;
@@ -62,6 +62,11 @@ function WatchScreen({ route }) {
     [id, mediaType, selectedSeason, selectedEpisode]
   );
 
+  const downloadUrl = useMemo(
+    () => getDownloadUrl(id, mediaType, selectedSeason, selectedEpisode),
+    [id, mediaType, selectedSeason, selectedEpisode]
+  );
+
   const title = details?.title || details?.name || routeTitle || "Watch";
 
   if (loading) {
@@ -82,7 +87,23 @@ function WatchScreen({ route }) {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{title}</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>{title}</Text>
+        <Pressable
+          onPress={() => Linking.openURL(downloadUrl)}
+          style={styles.downloadBtn}
+          accessibilityRole="link"
+          accessibilityLabel={
+            mediaType === "tv"
+              ? `Download S${selectedSeason}:E${selectedEpisode}`
+              : `Download ${title}`
+          }
+        >
+          <Text style={styles.downloadBtnText}>
+            {mediaType === "tv" ? `↓ S${selectedSeason}:E${selectedEpisode}` : "↓ Download"}
+          </Text>
+        </Pressable>
+      </View>
 
       <View style={styles.playerWrap}>
         <WebView
@@ -157,11 +178,31 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 28,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
   title: {
     color: "#fff",
     fontSize: 22,
     fontWeight: "800",
-    marginBottom: 12,
+    flex: 1,
+  },
+  downloadBtn: {
+    backgroundColor: "#1f2937",
+    borderWidth: 1,
+    borderColor: "#374151",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  downloadBtnText: {
+    color: "#ffc14d",
+    fontSize: 13,
+    fontWeight: "700",
   },
   playerWrap: {
     borderRadius: 12,

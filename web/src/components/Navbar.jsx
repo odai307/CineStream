@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Logo } from "./ui/Controls";
+import { InstallAppButton, Logo } from "./ui/Controls";
 import ProfileMenu from "./ProfileMenu";
 import SearchBox from "./SearchBox";
 import { ChevronDownIcon } from "./ui/Icons";
@@ -98,6 +98,7 @@ function Navbar() {
 
         <div className="ml-auto flex items-center gap-3 sm:gap-4">
           <SearchBox />
+          <InstallAppButton compact className="hidden sm:inline-flex" />
           <ProfileMenu />
         </div>
       </div>

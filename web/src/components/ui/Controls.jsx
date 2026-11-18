@@ -1,8 +1,12 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLibrary } from "../../context/LibraryContext";
 import { useMedia } from "../../context/MediaContext";
+import { useToast } from "../../context/ToastContext";
+import { getDownloadUrl, getTitle } from "../../lib/tmdb";
 import {
   CheckIcon,
+  DownloadIcon,
   PlayIcon,
   PlusIcon,
   StarIcon,
@@ -136,6 +140,119 @@ export function MuteButton({ size = "md", className = "" }) {
     >
       {muted ? <VolumeOffIcon /> : <VolumeOnIcon />}
     </CircleButton>
+  );
+}
+
+export function DownloadButton({
+  item,
+  season = 1,
+  episode = 1,
+  size = "md",
+  variant = "circle",
+  label,
+  className = "",
+}) {
+  if (!item?.id) return null;
+  const mediaType = item.media_type === "tv" ? "tv" : "movie";
+  const url = getDownloadUrl(item.id, mediaType, season, episode);
+  const title = getTitle(item);
+  const epSuffix = mediaType === "tv" ? ` S${season}:E${episode}` : "";
+  const ariaLabel = label || `Download ${title}${epSuffix}`;
+
+  if (variant === "pill") {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        aria-label={ariaLabel}
+        title={ariaLabel}
+        className={`inline-flex h-12 items-center gap-2 rounded-full border-2 border-white/40 px-5 text-sm font-semibold text-white transition hover:border-white hover:bg-white/10 ${className}`}
+      >
+        <DownloadIcon className="h-5 w-5" />
+        <span>{label || (mediaType === "tv" ? `Download S${season}:E${episode}` : "Download")}</span>
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      className={`${circleBase} ${circleSizes[size]} border-white/40 bg-black/40 text-white backdrop-blur-sm hover:border-white hover:bg-white/10 ${className}`}
+    >
+      <DownloadIcon />
+    </a>
+  );
+}
+
+// Captures the browser's PWA install prompt so any InstallAppButton can trigger it.
+let deferredInstallPrompt = null;
+const installListeners = new Set();
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    installListeners.forEach((fn) => fn(e));
+  });
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    installListeners.forEach((fn) => fn(null));
+  });
+}
+
+export function InstallAppButton({ className = "", compact = false }) {
+  const [promptEvent, setPromptEvent] = useState(deferredInstallPrompt);
+  const [installed, setInstalled] = useState(
+    () => typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches
+  );
+  const toast = useToast();
+
+  useEffect(() => {
+    const onPrompt = (e) => {
+      setPromptEvent(e);
+      if (!e) setInstalled(true);
+    };
+    installListeners.add(onPrompt);
+    return () => installListeners.delete(onPrompt);
+  }, []);
+
+  if (installed) return null;
+
+  const handleInstall = async () => {
+    if (promptEvent) {
+      promptEvent.prompt();
+      const choice = await promptEvent.userChoice.catch(() => null);
+      if (choice?.outcome === "accepted") {
+        deferredInstallPrompt = null;
+        setPromptEvent(null);
+        setInstalled(true);
+      }
+      return;
+    }
+    toast("To install CineStream: open your browser menu (⋮ or Share) and choose “Install app” or “Add to Home Screen”.");
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleInstall}
+      aria-label="Download CineStream App"
+      title="Install CineStream on your device"
+      className={
+        compact
+          ? `inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-white/90 transition hover:border-brand/60 hover:bg-brand/15 hover:text-white ${className}`
+          : `inline-flex items-center gap-2 rounded-md border border-white/20 bg-white/[0.06] px-3.5 py-2 text-xs font-semibold text-white/90 transition hover:border-brand/60 hover:bg-brand/15 hover:text-white ${className}`
+      }
+    >
+      <DownloadIcon className="h-3.5 w-3.5 text-brand-bright" />
+      <span>{compact ? "App" : "Download App"}</span>
+    </button>
   );
 }
 

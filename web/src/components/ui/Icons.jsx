@@ -189,3 +189,9 @@ export const FilmIcon = (props) => (
     <path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" />
   </svg>
 );
+
+export const DownloadIcon = (props) => (
+  <svg {...base(props)}>
+    <path d="M12 3v12M7 10l5 5 5-5M5 19h14" />
+  </svg>
+);
