@@ -241,21 +241,9 @@ function ModalContent({ id, mediaType, onClose, onRetry }) {
                 <ReplayIcon />
               </CircleButton>
             ) : (
-              <div className="flex items-center gap-2">
-                {trailerState === "playing" && (
-                  <>
-                    <CircleButton label="Rewind 10 seconds" onClick={() => trailerRef.current?.seekBy(-10)}>
-                      <SkipBackIcon seconds={10} />
-                    </CircleButton>
-                    <CircleButton label="Fast-forward 10 seconds" onClick={() => trailerRef.current?.seekBy(10)}>
-                      <SkipForwardIcon seconds={10} />
-                    </CircleButton>
-                  </>
-                )}
-                <CircleButton label={muted ? "Unmute" : "Mute"} onClick={() => setMuted((m) => !m)}>
-                  {muted ? <VolumeOffIcon /> : <VolumeOnIcon />}
-                </CircleButton>
-              </div>
+              <CircleButton label={muted ? "Unmute" : "Mute"} onClick={() => setMuted((m) => !m)}>
+                {muted ? <VolumeOffIcon /> : <VolumeOnIcon />}
+              </CircleButton>
             ))}
         </div>
       </div>

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
+import muxjs from "mux.js";
 import { useLibrary } from "../../context/LibraryContext";
 import { useMedia } from "../../context/MediaContext";
 import { useToast } from "../../context/ToastContext";
@@ -12,7 +13,6 @@ import {
   DownloadIcon,
   PlayIcon,
   PlusIcon,
-  ServerIcon,
   StarIcon,
   ThumbUpIcon,
   VolumeOffIcon,
@@ -21,56 +21,41 @@ import {
 
 const DOWNLOADS_KEY = "cinestream:downloads";
 
-const buildDownloadSources = (tmdbId, mediaType = "movie", season = 1, episode = 1) => {
-  if (typeof tmdb.getDownloadSources === "function") {
-    return tmdb.getDownloadSources(tmdbId, mediaType, season, episode);
+const stripTsPadding = (u8) => {
+  const limit = Math.min(u8.length - 376, 8192);
+  for (let i = 0; i < limit; i++) {
+    if (u8[i] === 0x47 && u8[i + 188] === 0x47 && u8[i + 376] === 0x47) {
+      return i > 0 ? u8.subarray(i) : u8;
+    }
   }
-  if (mediaType === "tv") {
-    return [
-      {
-        name: "Server 1 · MultiEmbed Direct",
-        quality: "1080p / 720p",
-        url: `https://multiembed.mov/directstream.php?video_id=${tmdbId}&tmdb=1&s=${season}&e=${episode}`,
-      },
-      {
-        name: "Server 2 · VidLink Pro",
-        quality: "1080p HD",
-        url: `https://vidlink.pro/tv/${tmdbId}/${season}/${episode}`,
-      },
-      {
-        name: "Server 3 · VidSrc CC",
-        quality: "1080p HD",
-        url: `https://vidsrc.cc/v2/embed/tv/${tmdbId}/${season}/${episode}`,
-      },
-      {
-        name: "Server 4 · VidSrc ME",
-        quality: "HD",
-        url: `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`,
-      },
-    ];
+  return u8;
+};
+
+const transmuxSegmentsToMp4 = (tsSegments) => {
+  const transmuxer = new muxjs.mp4.Transmuxer({ keepOriginalTimestamps: true });
+  const mp4Chunks = [];
+  let hasInit = false;
+
+  transmuxer.on("data", (seg) => {
+    if (!hasInit && seg.initSegment?.byteLength) {
+      mp4Chunks.push(new Uint8Array(seg.initSegment));
+      hasInit = true;
+    }
+    if (seg.data?.byteLength) {
+      mp4Chunks.push(new Uint8Array(seg.data));
+    }
+  });
+
+  for (const ts of tsSegments) {
+    if (!ts?.byteLength) continue;
+    transmuxer.push(ts);
+    transmuxer.flush();
   }
-  return [
-    {
-      name: "Server 1 · MultiEmbed Direct",
-      quality: "1080p / 720p",
-      url: `https://multiembed.mov/directstream.php?video_id=${tmdbId}&tmdb=1`,
-    },
-    {
-      name: "Server 2 · VidLink Pro",
-      quality: "1080p HD",
-      url: `https://vidlink.pro/movie/${tmdbId}`,
-    },
-    {
-      name: "Server 3 · VidSrc CC",
-      quality: "1080p HD",
-      url: `https://vidsrc.cc/v2/embed/movie/${tmdbId}`,
-    },
-    {
-      name: "Server 4 · VidSrc ME",
-      quality: "HD",
-      url: `https://vidsrc.me/embed/movie?tmdb=${tmdbId}`,
-    },
-  ];
+
+  if (mp4Chunks.length > 0) {
+    return { blob: new Blob(mp4Chunks, { type: "video/mp4" }), ext: "mp4" };
+  }
+  return { blob: new Blob(tsSegments, { type: "video/mp2t" }), ext: "ts" };
 };
 
 export function Logo({ className = "" }) {
@@ -201,64 +186,15 @@ export function MuteButton({ size = "md", className = "" }) {
   );
 }
 
-function triggerLocalPlayerDownload({ title, epSuffix, quality, sources }) {
-  const safeName = `${title}${epSuffix}`
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
-    .trim()
-    .slice(0, 80);
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>${title}${epSuffix} (${quality}) · CineStream</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #07070a; color: #fff; font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; background: #131318; border-bottom: 1px solid rgba(255,255,255,0.08); flex-wrap: wrap; }
-  .brand { font-weight: 800; font-size: 18px; }
-  .brand span { color: #ffc14d; }
-  .title { font-weight: 700; font-size: 15px; color: rgba(255,255,255,0.9); }
-  .servers { display: flex; gap: 6px; flex-wrap: wrap; }
-  button { background: #1b1b22; color: #fff; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
-  button.active { background: #f5a524; color: #140f04; border-color: #f5a524; }
-  iframe { flex: 1; width: 100%; border: 0; background: #000; }
-</style>
-</head>
-<body>
-<header>
-  <div class="brand">Cine<span>Stream</span></div>
-  <div class="title">${title}${epSuffix} · ${quality}</div>
-  <div class="servers" id="servers"></div>
-</header>
-<iframe id="player" allowfullscreen allow="fullscreen *; autoplay *; encrypted-media *; picture-in-picture *"></iframe>
-<script>
-  const sources = ${JSON.stringify(sources)};
-  const frame = document.getElementById("player");
-  const wrap = document.getElementById("servers");
-  function select(idx) {
-    frame.src = sources[idx].url;
-    [...wrap.children].forEach((b, i) => b.classList.toggle("active", i === idx));
-  }
-  sources.forEach((s, i) => {
-    const btn = document.createElement("button");
-    btn.textContent = s.name;
-    btn.onclick = () => select(i);
-    wrap.appendChild(btn);
-  });
-  select(0);
-</script>
-</body>
-</html>`;
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+function saveVideoBlob(blob, filename) {
   const blobUrl = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = blobUrl;
-  a.download = `${safeName || "CineStream"} (${quality}).html`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
 }
 
 export function DownloadButton({
@@ -271,9 +207,17 @@ export function DownloadButton({
   className = "",
 }) {
   const [open, setOpen] = useState(false);
-  const [quality, setQuality] = useState("1080p Full HD");
+  const [streamInfo, setStreamInfo] = useState(null);
+  const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState(null);
+  const [quality, setQuality] = useState("720p HD");
   const [progress, setProgress] = useState(0);
+  const [doneCount, setDoneCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [bytesDownloaded, setBytesDownloaded] = useState(0);
   const [downloading, setDownloading] = useState(false);
+  const abortRef = useRef(null);
+  const collectedRef = useRef([]);
   const toast = useToast();
 
   const mediaType = item?.media_type === "tv" ? "tv" : "movie";
@@ -284,36 +228,154 @@ export function DownloadButton({
     setDownloaded(Boolean(dlKey && readJSON(DOWNLOADS_KEY, {})[dlKey]));
   }, [dlKey]);
 
+  useEffect(() => {
+    if (!open || !item?.id) return undefined;
+    let alive = true;
+    setResolving(true);
+    setResolveError(null);
+    const params = new URLSearchParams({
+      type: mediaType,
+      id: String(item.id),
+      s: String(season),
+      e: String(episode),
+    });
+    fetch(`/api/stream?${params.toString()}`)
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || `Failed to resolve video stream (${r.status})`);
+        return j;
+      })
+      .then((data) => {
+        if (!alive) return;
+        setStreamInfo(data);
+        if (data.qualities?.[0]?.label) setQuality(data.qualities[0].label);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setResolveError(err.message || "Could not resolve video stream");
+      })
+      .finally(() => {
+        if (alive) setResolving(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open, item?.id, mediaType, season, episode]);
+
   if (!item?.id) return null;
 
-  const sources = buildDownloadSources(item.id, mediaType, season, episode);
   const title = tmdb.getTitle ? tmdb.getTitle(item) : item.title || item.name || "Title";
-  const epSuffix = mediaType === "tv" ? ` · S${season}:E${episode}` : "";
+  const epSuffix = mediaType === "tv" ? ` S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}` : "";
+  const safeBaseName = `${title}${epSuffix}`
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
+    .trim()
+    .slice(0, 80);
   const ariaLabel = label || (downloaded ? `Downloaded: ${title}${epSuffix}` : `Download ${title}${epSuffix}`);
 
-  const startDownload = () => {
+  const finalizeMp4 = (segmentsArray) => {
+    const valid = segmentsArray.filter(Boolean);
+    if (!valid.length) {
+      toast("No video segments downloaded yet.", { tone: "error" });
+      return;
+    }
+    const { blob, ext } = transmuxSegmentsToMp4(valid);
+    saveVideoBlob(blob, `${safeBaseName || "CineStream"} (${quality}).${ext}`);
+    setDownloaded(true);
+    const saved = readJSON(DOWNLOADS_KEY, {});
+    writeJSON(DOWNLOADS_KEY, {
+      ...saved,
+      [dlKey]: { id: item.id, mediaType, title, season, episode, quality, savedAt: Date.now() },
+    });
+    toast(`Saved "${safeBaseName}.${ext}" (${(blob.size / (1024 * 1024)).toFixed(1)} MB)`, { tone: "success" });
+  };
+
+  const startDownload = async () => {
     if (downloading) return;
     setDownloading(true);
-    setProgress(12);
-    const step1 = setTimeout(() => setProgress(48), 250);
-    const step2 = setTimeout(() => setProgress(84), 520);
-    const step3 = setTimeout(() => {
-      setProgress(100);
+    setProgress(0);
+    setDoneCount(0);
+    setBytesDownloaded(0);
+    setResolveError(null);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      let info = streamInfo;
+      if (!info?.segments?.length) {
+        const params = new URLSearchParams({
+          type: mediaType,
+          id: String(item.id),
+          s: String(season),
+          e: String(episode),
+          quality,
+        });
+        const r = await fetch(`/api/stream?${params.toString()}`, { signal: controller.signal });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j?.segments?.length) {
+          throw new Error(j.error || "No downloadable video stream found for this title");
+        }
+        info = j;
+        setStreamInfo(j);
+      }
+
+      const segUrls = info.segments;
+      setTotalCount(segUrls.length);
+      const ordered = new Array(segUrls.length).fill(null);
+      collectedRef.current = ordered;
+
+      let cursor = 0;
+      let completed = 0;
+      let totalBytes = 0;
+      const concurrency = 6;
+
+      const fetchSegment = async (url) => {
+        try {
+          const res = await fetch(url, { signal: controller.signal });
+          if (res.ok) return new Uint8Array(await res.arrayBuffer());
+        } catch (err) {
+          if (err?.name === "AbortError") throw err;
+        }
+        const proxied = await fetch(`/api/stream?proxy=${encodeURIComponent(url)}`, {
+          signal: controller.signal,
+        });
+        if (!proxied.ok) throw new Error(`Segment download failed (${proxied.status})`);
+        return new Uint8Array(await proxied.arrayBuffer());
+      };
+
+      const worker = async () => {
+        while (cursor < segUrls.length) {
+          const idx = cursor++;
+          const raw = await fetchSegment(segUrls[idx]);
+          const clean = stripTsPadding(raw);
+          ordered[idx] = clean;
+          completed += 1;
+          totalBytes += clean.byteLength;
+          setDoneCount(completed);
+          setBytesDownloaded(totalBytes);
+          setProgress(Math.round((completed / segUrls.length) * 100));
+        }
+      };
+
+      await Promise.all(Array.from({ length: Math.min(concurrency, segUrls.length) }, () => worker()));
+      finalizeMp4(ordered);
+    } catch (err) {
+      if (err?.name !== "AbortError") {
+        setResolveError(err.message || "Download failed");
+      }
+    } finally {
       setDownloading(false);
-      setDownloaded(true);
-      const saved = readJSON(DOWNLOADS_KEY, {});
-      writeJSON(DOWNLOADS_KEY, {
-        ...saved,
-        [dlKey]: { id: item.id, mediaType, title, season, episode, quality, savedAt: Date.now() },
-      });
-      triggerLocalPlayerDownload({ title, epSuffix, quality, sources });
-      toast(`Downloaded "${title}${epSuffix}" (${quality})`, { tone: "success" });
-    }, 800);
-    return () => {
-      clearTimeout(step1);
-      clearTimeout(step2);
-      clearTimeout(step3);
-    };
+      abortRef.current = null;
+    }
+  };
+
+  const cancelDownload = (savePartial = false) => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setDownloading(false);
+    if (savePartial && collectedRef.current.some(Boolean)) {
+      finalizeMp4(collectedRef.current);
+    }
   };
 
   const openDialog = (e) => {
@@ -382,6 +444,11 @@ export function DownloadButton({
     );
   }
 
+  const qualities = streamInfo?.qualities?.length
+    ? streamInfo.qualities.map((q) => q.label)
+    : ["720p HD"];
+  const mbText = `${(bytesDownloaded / (1024 * 1024)).toFixed(1)} MB`;
+
   return (
     <>
       {trigger}
@@ -391,7 +458,7 @@ export function DownloadButton({
             className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fade-in"
             onClick={(e) => {
               e.stopPropagation();
-              if (e.target === e.currentTarget) setOpen(false);
+              if (e.target === e.currentTarget && !downloading) setOpen(false);
             }}
           >
             <div
@@ -403,15 +470,18 @@ export function DownloadButton({
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-brand-bright">Download</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-brand-bright">Video Download (.MP4)</p>
                   <h3 className="brand-font mt-1 text-xl font-extrabold">
                     {title}
-                    {epSuffix && <span className="text-white/65">{epSuffix}</span>}
+                    {epSuffix && <span className="text-white/65"> · {epSuffix.trim()}</span>}
                   </h3>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setOpen(false)}
+                  onClick={() => {
+                    if (downloading) cancelDownload(false);
+                    setOpen(false);
+                  }}
                   aria-label="Close"
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/75 transition hover:bg-white/20 hover:text-white"
                 >
@@ -419,72 +489,86 @@ export function DownloadButton({
                 </button>
               </div>
 
-              <div className="mt-5 space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-white/50">Select Quality</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {["1080p Full HD", "720p Standard HD"].map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => setQuality(q)}
-                      className={`rounded-lg border px-3 py-2.5 text-left text-xs font-semibold transition ${
-                        quality === q
-                          ? "border-brand bg-brand/15 text-brand-bright"
-                          : "border-white/10 bg-surface-2 text-white/75 hover:border-white/25"
-                      }`}
-                    >
-                      {q}
-                    </button>
-                  ))}
+              <div className="mt-5 space-y-4">
+                {resolving && (
+                  <p className="text-xs text-white/60">Locating direct MP4 video stream…</p>
+                )}
+
+                {resolveError && (
+                  <p className="rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+                    {resolveError}
+                  </p>
+                )}
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/50">Video Quality</p>
+                  <div className="flex flex-wrap gap-2">
+                    {qualities.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        disabled={downloading}
+                        onClick={() => setQuality(q)}
+                        className={`rounded-lg border px-3.5 py-2 text-xs font-semibold transition ${
+                          quality === q
+                            ? "border-brand bg-brand/15 text-brand-bright"
+                            : "border-white/10 bg-surface-2 text-white/75 hover:border-white/25"
+                        }`}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={startDownload}
-                  disabled={downloading}
-                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-3 text-sm font-bold text-on-brand transition hover:bg-brand-bright disabled:opacity-60"
-                >
-                  <DownloadIcon className="h-5 w-5" />
-                  {downloading
-                    ? `Downloading… ${progress}%`
-                    : downloaded
-                    ? `Download Again (${quality})`
-                    : `Save to Device (${quality})`}
-                </button>
-
-                {downloading && (
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                    <div
-                      className="h-full rounded-full bg-brand transition-all duration-300"
-                      style={{ width: `${progress}%` }}
-                    />
+                {!downloading ? (
+                  <button
+                    type="button"
+                    onClick={startDownload}
+                    disabled={resolving}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-3 text-sm font-bold text-on-brand transition hover:bg-brand-bright disabled:opacity-60"
+                  >
+                    <DownloadIcon className="h-5 w-5" />
+                    {downloaded ? `Download MP4 Again (${quality})` : `Download MP4 Video (${quality})`}
+                  </button>
+                ) : (
+                  <div className="space-y-3 rounded-lg border border-white/10 bg-surface-2 p-3.5">
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span className="text-brand-bright">Downloading MP4… {progress}%</span>
+                      <span className="tabular-nums text-white/70">
+                        {mbText} ({doneCount}/{totalCount} parts)
+                      </span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-brand transition-all duration-200"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      {doneCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => cancelDownload(true)}
+                          className="flex-1 rounded-md bg-white/15 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/25"
+                        >
+                          Save {mbText} Now (.mp4)
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => cancelDownload(false)}
+                        className="rounded-md border border-white/15 px-3 py-2 text-xs font-semibold text-white/70 transition hover:bg-white/10 hover:text-white"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 )}
-              </div>
 
-              <div className="mt-6 border-t border-white/10 pt-4">
-                <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-white/50">
-                  Direct Stream / External Mirrors
+                <p className="text-[0.72rem] leading-relaxed text-white/45">
+                  Downloads and remuxes the video stream directly into a playable <strong>.mp4</strong> file in your browser.
                 </p>
-                <div className="space-y-2">
-                  {sources.map((src) => (
-                    <a
-                      key={src.name}
-                      href={src.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-between rounded-lg border border-white/10 bg-surface-2 px-3.5 py-2.5 text-sm transition hover:border-white/30 hover:bg-surface-3"
-                    >
-                      <span className="inline-flex items-center gap-2 font-medium text-white/90">
-                        <ServerIcon className="h-4 w-4 text-brand-bright" />
-                        {src.name}
-                      </span>
-                      <span className="rounded bg-white/10 px-2 py-0.5 text-[0.7rem] font-semibold text-white/70">
-                        {src.quality}
-                      </span>
-                    </a>
-                  ))}
-                </div>
               </div>
             </div>
           </div>,

@@ -144,7 +144,7 @@ function PreviewCard({ item, rect, onClose }) {
           onPlaying={() => setTrailerOn(true)}
         />
         <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-surface via-surface/30 to-transparent" />
-        <div className="absolute bottom-3 left-4 right-28">
+        <div className="absolute bottom-3 left-4 right-16">
           {logoPath ? (
             <img
               src={getLogoUrl(logoPath)}
@@ -158,35 +158,7 @@ function PreviewCard({ item, rect, onClose }) {
           )}
         </div>
       </button>
-      {trailerKey && (
-        <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
-          {trailerOn && (
-            <>
-              <CircleButton
-                size="sm"
-                label="Rewind 10 seconds"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  trailerRef.current?.seekBy(-10);
-                }}
-              >
-                <SkipBackIcon seconds={10} />
-              </CircleButton>
-              <CircleButton
-                size="sm"
-                label="Fast-forward 10 seconds"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  trailerRef.current?.seekBy(10);
-                }}
-              >
-                <SkipForwardIcon seconds={10} />
-              </CircleButton>
-            </>
-          )}
-          <MuteButton size="sm" />
-        </div>
-      )}
+      {trailerKey && <MuteButton size="sm" className="absolute bottom-3 right-3" />}
       </div>
 
       <div className="space-y-3 p-4">
