@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useLibrary } from "../../context/LibraryContext";
 import { useMedia } from "../../context/MediaContext";
 import { useToast } from "../../context/ToastContext";
-import { getDownloadUrl, getTitle } from "../../lib/tmdb";
+import * as tmdb from "../../lib/tmdb";
 import {
   CheckIcon,
   DownloadIcon,
@@ -14,6 +14,15 @@ import {
   VolumeOffIcon,
   VolumeOnIcon,
 } from "./Icons";
+
+const buildDownloadUrl = (tmdbId, mediaType = "movie", season = 1, episode = 1) => {
+  if (typeof tmdb.getDownloadUrl === "function") {
+    return tmdb.getDownloadUrl(tmdbId, mediaType, season, episode);
+  }
+  return mediaType === "tv"
+    ? `https://dl.vidsrc.vip/tv/${tmdbId}/${season}/${episode}`
+    : `https://dl.vidsrc.vip/movie/${tmdbId}`;
+};
 
 export function Logo({ className = "" }) {
   return (
@@ -154,8 +163,8 @@ export function DownloadButton({
 }) {
   if (!item?.id) return null;
   const mediaType = item.media_type === "tv" ? "tv" : "movie";
-  const url = getDownloadUrl(item.id, mediaType, season, episode);
-  const title = getTitle(item);
+  const url = buildDownloadUrl(item.id, mediaType, season, episode);
+  const title = tmdb.getTitle ? tmdb.getTitle(item) : item.title || item.name || "Title";
   const epSuffix = mediaType === "tv" ? ` S${season}:E${episode}` : "";
   const ariaLabel = label || `Download ${title}${epSuffix}`;
 

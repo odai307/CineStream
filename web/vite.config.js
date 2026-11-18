@@ -7,6 +7,9 @@ export default defineConfig({
   // .env lives at the repo root so web and tooling share one file.
   envDir: "..",
   envPrefix: ["VITE_", "TMDB_"],
+  optimizeDeps: {
+    exclude: ["@cinestream/core"],
+  },
   server: {
     // Allow serving the shared package from ../packages/core.
     fs: { allow: [".."] },

@@ -26,15 +26,24 @@ import useTitleDetails from "../hooks/useTitleDetails";
 import {
   formatRuntime,
   getBackdropUrl,
-  getDownloadUrl,
   getFallbackUrls,
   getLogoUrl,
   getTitle,
   getTVEpisodes,
   getYear,
 } from "../lib/tmdb";
+import * as tmdb from "../lib/tmdb";
 import { watchPath } from "../lib/routes";
 import { readJSON } from "../lib/storage";
+
+const buildDownloadUrl = (tmdbId, mediaType = "movie", season = 1, episode = 1) => {
+  if (typeof tmdb.getDownloadUrl === "function") {
+    return tmdb.getDownloadUrl(tmdbId, mediaType, season, episode);
+  }
+  return mediaType === "tv"
+    ? `https://dl.vidsrc.vip/tv/${tmdbId}/${season}/${episode}`
+    : `https://dl.vidsrc.vip/movie/${tmdbId}`;
+};
 
 const SKIP_KEY = "cinestream:skip-seconds";
 const HIDE_SKIP_AFTER_MS = 2800;
@@ -592,7 +601,7 @@ function Watch() {
         </div>
         <ServerMenu count={sources.length} current={server} onChange={setServer} />
         <a
-          href={getDownloadUrl(id, mediaType, season, episode)}
+          href={buildDownloadUrl(id, mediaType, season, episode)}
           target="_blank"
           rel="noopener noreferrer"
           aria-label={mediaType === "tv" ? `Download S${season}:E${episode}` : "Download"}
