@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import Hls from "hls.js";
 import EpisodeList from "../components/EpisodeList";
 import Row from "../components/Row";
 import { DownloadButton, LikeButton, ListButton, MaturityBadge, Score } from "../components/ui/Controls";
@@ -11,18 +10,11 @@ import {
   ChevronLeftIcon,
   CloseIcon,
   FilmIcon,
-  FullscreenIcon,
   InfoIcon,
   NextIcon,
-  PauseIcon,
   PlayIcon,
   ReplayIcon,
   ServerIcon,
-  SettingsIcon,
-  SkipBackIcon,
-  SkipForwardIcon,
-  VolumeOffIcon,
-  VolumeOnIcon,
 } from "../components/ui/Icons";
 import TrailerTheater from "../components/TrailerTheater";
 import { useLibrary } from "../context/LibraryContext";
@@ -38,45 +30,6 @@ import {
   getYear,
 } from "../lib/tmdb";
 import { watchPath } from "../lib/routes";
-import { readJSON, writeJSON } from "../lib/storage";
-
-const SKIP_KEY = "cinestream:skip-seconds";
-const SKIP_PRESETS = [5, 10, 15, 30];
-const HIDE_CONTROLS_AFTER_MS = 2800;
-
-const formatTime = (s = 0) => {
-  if (!Number.isFinite(s) || s < 0) s = 0;
-  const total = Math.floor(s);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const sec = String(total % 60).padStart(2, "0");
-  return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
-};
-
-// Strips any leading non-0x47 padding header bytes (e.g. disguised image headers) before HLS.js demuxes MPEG-TS.
-const createCleanFragmentLoader = () => {
-  const BaseLoader = Hls?.DefaultConfig?.loader;
-  if (!BaseLoader) return undefined;
-  return class CleanTsLoader extends BaseLoader {
-    load(context, config, callbacks) {
-      const origSuccess = callbacks.onSuccess;
-      callbacks.onSuccess = (response, stats, ctx, networkDetails) => {
-        if (response?.data instanceof ArrayBuffer) {
-          const u8 = new Uint8Array(response.data);
-          const limit = Math.min(u8.length - 376, 8192);
-          for (let i = 0; i < limit; i++) {
-            if (u8[i] === 0x47 && u8[i + 188] === 0x47 && u8[i + 376] === 0x47) {
-              if (i > 0) response.data = response.data.slice(i);
-              break;
-            }
-          }
-        }
-        origSuccess(response, stats, ctx, networkDetails);
-      };
-      super.load(context, config, callbacks);
-    }
-  };
-};
 
 // Hide the intro after this long even if the provider page is still loading in the background.
 const REVEAL_AFTER_MS = 4000;
@@ -147,519 +100,17 @@ function ServerMenu({ count, current, onChange }) {
   );
 }
 
-// Native HTML5 + HLS.js player with Netflix-style forward/reverse controls and timeline.
-function NativeStreamPlayer({ id, mediaType, season, episode, title, subtitle, backdrop, logo, onFallback }) {
-  const stageRef = useRef(null);
-  const videoRef = useRef(null);
-  const hideTimer = useRef(null);
-  const lastTap = useRef({ time: 0, side: null });
-  const pendingToggle = useRef(null);
-
-  const [loading, setLoading] = useState(true);
-  const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [volume, setVolume] = useState(1);
-  const [time, setTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [bufferedEnd, setBufferedEnd] = useState(0);
-  const [showControls, setShowControls] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [flash, setFlash] = useState(null);
-  const [skip, setSkip] = useState(() => {
-    const saved = Number(readJSON(SKIP_KEY, 10));
-    return saved >= 1 && saved <= 300 ? saved : 10;
-  });
-
-  useEffect(() => writeJSON(SKIP_KEY, skip), [skip]);
-
-  const poke = useCallback(() => {
-    setShowControls(true);
-    clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(() => setShowControls(false), HIDE_CONTROLS_AFTER_MS);
-  }, []);
-
-  useEffect(() => {
-    if (!playing || settingsOpen) {
-      clearTimeout(hideTimer.current);
-      setShowControls(true);
-    } else {
-      poke();
-    }
-    return () => clearTimeout(hideTimer.current);
-  }, [playing, settingsOpen, poke]);
-
-  // Resolve and attach the HLS stream.
-  useEffect(() => {
-    let alive = true;
-    let hls = null;
-    let blobUrl = null;
-    setLoading(true);
-    setTime(0);
-    setDuration(0);
-
-    const params = new URLSearchParams({
-      type: mediaType,
-      id: String(id),
-      s: String(season),
-      e: String(episode),
-    });
-
-    fetch(`/api/stream?${params.toString()}`)
-      .then(async (r) => {
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j?.m3u8) throw new Error(j.error || "Stream unavailable");
-        return j;
-      })
-      .then((data) => {
-        if (!alive) return;
-        const video = videoRef.current;
-        if (!video) return;
-
-        blobUrl = URL.createObjectURL(new Blob([data.m3u8], { type: "application/vnd.apple.mpegurl" }));
-
-        if (Hls.isSupported()) {
-          const fLoader = createCleanFragmentLoader();
-          hls = new Hls({
-            ...(fLoader ? { fLoader } : {}),
-            enableWorker: true,
-            maxBufferLength: 30,
-          });
-          hls.loadSource(blobUrl);
-          hls.attachMedia(video);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            if (!alive) return;
-            setLoading(false);
-            video.play().catch(() => {});
-          });
-          hls.on(Hls.Events.ERROR, (_, errData) => {
-            if (errData?.fatal && alive) {
-              onFallback?.();
-            }
-          });
-        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-          video.src = blobUrl;
-          video.addEventListener(
-            "loadedmetadata",
-            () => {
-              if (!alive) return;
-              setLoading(false);
-              video.play().catch(() => {});
-            },
-            { once: true }
-          );
-        } else {
-          onFallback?.();
-        }
-      })
-      .catch(() => {
-        if (alive) onFallback?.();
-      });
-
-    return () => {
-      alive = false;
-      if (hls) {
-        try {
-          hls.destroy();
-        } catch {}
-      }
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
-  }, [id, mediaType, season, episode, onFallback]);
-
-  const togglePlay = useCallback(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (v.paused) v.play().catch(() => {});
-    else v.pause();
-    poke();
-  }, [poke]);
-
-  const seekBy = useCallback(
-    (delta) => {
-      const v = videoRef.current;
-      if (!v) return;
-      const dur = v.duration || duration || 0;
-      const target = dur > 0 ? Math.min(Math.max(0, v.currentTime + delta), dur) : Math.max(0, v.currentTime + delta);
-      v.currentTime = target;
-      setTime(target);
-      const seconds = Math.abs(delta);
-      setFlash({
-        side: delta < 0 ? "left" : "right",
-        seconds,
-        text: `${delta < 0 ? "−" : "+"}${seconds}s`,
-        id: Date.now(),
-      });
-      poke();
-    },
-    [duration, poke]
-  );
-
-  useEffect(() => {
-    if (!flash) return undefined;
-    const t = setTimeout(() => setFlash(null), 600);
-    return () => clearTimeout(t);
-  }, [flash]);
-
-  const toggleMute = useCallback(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.muted = !v.muted;
-    setMuted(v.muted);
-    poke();
-  }, [poke]);
-
-  const changeVolume = (val) => {
-    const v = videoRef.current;
-    if (!v) return;
-    const nextVol = Math.max(0, Math.min(1, Number(val)));
-    v.volume = nextVol;
-    v.muted = nextVol === 0;
-    setVolume(nextVol);
-    setMuted(v.muted);
-    poke();
-  };
-
-  const toggleFullscreen = useCallback(() => {
-    const el = stageRef.current;
-    if (!document.fullscreenElement) el?.requestFullscreen?.().catch(() => {});
-    else document.exitFullscreen?.().catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const onFs = () => setFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
-  }, []);
-
-  // Keyboard shortcuts: ← / → / J / L skip, Space / K play-pause, M mute, F fullscreen.
-  useEffect(() => {
-    const onKey = (e) => {
-      if (["INPUT", "SELECT", "TEXTAREA"].includes(e.target?.tagName)) return;
-      if (e.key === "ArrowLeft" || e.key?.toLowerCase() === "j") {
-        e.preventDefault();
-        seekBy(-skip);
-      } else if (e.key === "ArrowRight" || e.key?.toLowerCase() === "l") {
-        e.preventDefault();
-        seekBy(skip);
-      } else if (e.key === " " || e.key?.toLowerCase() === "k") {
-        e.preventDefault();
-        togglePlay();
-      } else if (e.key?.toLowerCase() === "m") {
-        e.preventDefault();
-        toggleMute();
-      } else if (e.key?.toLowerCase() === "f") {
-        e.preventDefault();
-        toggleFullscreen();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [seekBy, skip, togglePlay, toggleMute, toggleFullscreen]);
-
-  // Single click = play/pause, double-click/tap left or right third = skip.
-  const onStageClick = (e) => {
-    if (settingsOpen) {
-      setSettingsOpen(false);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const side = x < 0.35 ? "left" : x > 0.65 ? "right" : "center";
-    const now = Date.now();
-    clearTimeout(pendingToggle.current);
-    if (side !== "center" && lastTap.current.side === side && now - lastTap.current.time < 300) {
-      lastTap.current = { time: 0, side: null };
-      seekBy(side === "left" ? -skip : skip);
-      return;
-    }
-    lastTap.current = { time: now, side };
-    pendingToggle.current = setTimeout(() => togglePlay(), side === "center" ? 0 : 260);
-    poke();
-  };
-  useEffect(() => () => clearTimeout(pendingToggle.current), []);
-
-  const progress = duration > 0 ? Math.min(100, (time / duration) * 100) : 0;
-  const bufferedPct = duration > 0 ? Math.min(100, (bufferedEnd / duration) * 100) : 0;
-  const controlsVisible = showControls || !playing;
-
-  return (
-    <div
-      ref={stageRef}
-      onMouseMove={poke}
-      className={`relative mx-auto aspect-video w-full max-w-[calc((100svh-4rem)*16/9)] select-none overflow-hidden bg-black ${
-        controlsVisible ? "" : "cursor-none"
-      }`}
-    >
-      <video
-        ref={videoRef}
-        playsInline
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onLoadedMetadata={(e) => {
-          setDuration(e.currentTarget.duration || 0);
-          setLoading(false);
-        }}
-        onTimeUpdate={(e) => {
-          const v = e.currentTarget;
-          setTime(v.currentTime || 0);
-          if (v.duration && v.duration > 0) setDuration(v.duration);
-          if (v.buffered?.length) {
-            setBufferedEnd(v.buffered.end(v.buffered.length - 1));
-          }
-        }}
-        onWaiting={() => setLoading(true)}
-        onPlaying={() => setLoading(false)}
-        className="h-full w-full object-contain"
-      />
-
-      {/* Click / double-tap surface */}
-      <div className="absolute inset-0 z-10" onClick={onStageClick} onDoubleClick={toggleFullscreen} />
-
-      {/* Loading backdrop */}
-      {loading && time === 0 && (
-        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden bg-black">
-          {backdrop && (
-            <img
-              src={getBackdropUrl(backdrop)}
-              alt=""
-              className="absolute inset-0 h-full w-full animate-ken-burns object-cover opacity-35"
-            />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/40" />
-          <div className="relative flex max-w-lg flex-col items-center px-6 text-center">
-            {logo ? (
-              <img
-                src={getLogoUrl(logo)}
-                alt={title}
-                className="mb-4 max-h-16 max-w-[70%] object-contain drop-shadow-[0_4px_24px_rgba(0,0,0,0.7)] sm:max-h-24"
-              />
-            ) : (
-              title && <h2 className="brand-font mb-3 text-2xl font-extrabold text-shadow sm:text-4xl">{title}</h2>
-            )}
-            {subtitle && <p className="mb-6 text-sm text-white/70 sm:text-base">{subtitle}</p>}
-            <div className="h-1 w-48 overflow-hidden rounded-full bg-white/15 sm:w-64">
-              <div className="h-full w-2/5 animate-loading-bar rounded-full bg-gradient-to-r from-brand to-brand-bright" />
-            </div>
-            <p className="mt-4 text-xs text-white/55 sm:text-sm">Getting your stream ready…</p>
-          </div>
-        </div>
-      )}
-
-      {/* Netflix -10s / +10s skip flash */}
-      {flash && (
-        <div
-          key={flash.id}
-          className={`pointer-events-none absolute top-1/2 z-30 flex -translate-y-1/2 animate-pop-in flex-col items-center gap-1 rounded-full bg-black/60 px-4 py-3 text-white backdrop-blur-sm [--from-scale:0.7] ${
-            flash.side === "left" ? "left-[15%]" : "right-[15%]"
-          }`}
-        >
-          {flash.side === "left" ? (
-            <SkipBackIcon seconds={flash.seconds} className="h-8 w-8 sm:h-9 sm:w-9" />
-          ) : (
-            <SkipForwardIcon seconds={flash.seconds} className="h-8 w-8 sm:h-9 sm:w-9" />
-          )}
-          <span className="text-xs font-bold sm:text-sm">{flash.text}</span>
-        </div>
-      )}
-
-      {/* Netflix-style Player Controls (Center + Bottom Bar) */}
-      {(!loading || time > 0) && (
-        <div
-          className={`pointer-events-none absolute inset-0 z-20 transition-opacity duration-300 ${
-            controlsVisible ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          {/* Center: Rewind 10s · Play/Pause · Forward 10s */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-8 sm:gap-14">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                seekBy(-skip);
-              }}
-              aria-label={`Rewind ${skip} seconds`}
-              title={`Rewind ${skip}s (←)`}
-              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-white/90 backdrop-blur-sm transition hover:scale-110 hover:bg-black/70 hover:text-white sm:h-12 sm:w-12"
-            >
-              <SkipBackIcon seconds={skip} className="h-7 w-7 sm:h-8 sm:w-8" />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                togglePlay();
-              }}
-              aria-label={playing ? "Pause" : "Play"}
-              className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-md transition hover:scale-105 hover:bg-white/25 sm:h-16 sm:w-16"
-            >
-              {playing ? (
-                <PauseIcon className="h-7 w-7 sm:h-8 sm:w-8" />
-              ) : (
-                <PlayIcon className="h-7 w-7 translate-x-0.5 sm:h-8 sm:w-8" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                seekBy(skip);
-              }}
-              aria-label={`Fast-forward ${skip} seconds`}
-              title={`Fast-forward ${skip}s (→)`}
-              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-white/90 backdrop-blur-sm transition hover:scale-110 hover:bg-black/70 hover:text-white sm:h-12 sm:w-12"
-            >
-              <SkipForwardIcon seconds={skip} className="h-7 w-7 sm:h-8 sm:w-8" />
-            </button>
-          </div>
-
-          {/* Bottom Bar: Timeline + Netflix Control Strip */}
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="pointer-events-auto absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-4 pb-3 pt-10 sm:px-6 sm:pb-4"
-          >
-            {/* Seek Bar */}
-            <div className="flex items-center gap-3 text-xs tabular-nums text-white/85">
-              <span>{formatTime(time)}</span>
-              <input
-                type="range"
-                min={0}
-                max={duration || 100}
-                step={0.1}
-                value={Math.min(time, duration || 100)}
-                onChange={(e) => {
-                  const t = Number(e.target.value);
-                  setTime(t);
-                  if (videoRef.current) videoRef.current.currentTime = t;
-                  poke();
-                }}
-                aria-label="Seek timeline"
-                className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full accent-[var(--color-brand)]"
-                style={{
-                  background: `linear-gradient(to right, var(--color-brand) ${progress}%, rgba(255,255,255,0.4) ${progress}%, rgba(255,255,255,0.4) ${bufferedPct}%, rgba(255,255,255,0.18) ${bufferedPct}%)`,
-                }}
-              />
-              <span>{formatTime(duration)}</span>
-            </div>
-
-            {/* Control Buttons Row */}
-            <div className="mt-2 flex items-center gap-1 sm:gap-2">
-              <button
-                type="button"
-                onClick={togglePlay}
-                aria-label={playing ? "Pause" : "Play"}
-                title={playing ? "Pause (Space)" : "Play (Space)"}
-                className="rounded-md p-1.5 text-white/90 transition hover:bg-white/10 hover:text-white"
-              >
-                {playing ? <PauseIcon className="h-5 w-5 sm:h-6 sm:w-6" /> : <PlayIcon className="h-5 w-5 sm:h-6 sm:w-6" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => seekBy(-skip)}
-                aria-label={`Rewind ${skip} seconds`}
-                title={`Rewind ${skip}s (←)`}
-                className="rounded-md p-1.5 text-white/90 transition hover:bg-white/10 hover:text-white"
-              >
-                <SkipBackIcon seconds={skip} className="h-6 w-6 sm:h-7 sm:w-7" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => seekBy(skip)}
-                aria-label={`Fast-forward ${skip} seconds`}
-                title={`Fast-forward ${skip}s (→)`}
-                className="rounded-md p-1.5 text-white/90 transition hover:bg-white/10 hover:text-white"
-              >
-                <SkipForwardIcon seconds={skip} className="h-6 w-6 sm:h-7 sm:w-7" />
-              </button>
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={toggleMute}
-                  aria-label={muted ? "Unmute" : "Mute"}
-                  title={muted ? "Unmute (M)" : "Mute (M)"}
-                  className="rounded-md p-1.5 text-white/90 transition hover:bg-white/10 hover:text-white"
-                >
-                  {muted || volume === 0 ? (
-                    <VolumeOffIcon className="h-5 w-5 sm:h-6 sm:w-6" />
-                  ) : (
-                    <VolumeOnIcon className="h-5 w-5 sm:h-6 sm:w-6" />
-                  )}
-                </button>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={muted ? 0 : volume}
-                  onChange={(e) => changeVolume(e.target.value)}
-                  aria-label="Volume"
-                  className="hidden h-1 w-16 cursor-pointer appearance-none rounded-full bg-white/25 accent-white sm:block md:w-20"
-                />
-              </div>
-
-              {title && (
-                <p className="ml-2 hidden min-w-0 flex-1 truncate text-xs font-medium text-white/75 md:block">
-                  <span className="font-bold text-white">{title}</span>
-                  {subtitle && <span className="text-white/50"> · {subtitle}</span>}
-                </p>
-              )}
-
-              <div className="relative ml-auto flex items-center gap-1 sm:gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSettingsOpen((o) => !o)}
-                  aria-expanded={settingsOpen}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-white/10 hover:text-white"
-                >
-                  <SettingsIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="hidden sm:inline">Skip {skip}s</span>
-                </button>
-                {settingsOpen && (
-                  <div className="absolute bottom-full right-0 mb-2 w-48 animate-fade-in rounded-lg border border-white/10 bg-black/95 p-3 text-xs shadow-2xl backdrop-blur-xl">
-                    <p className="mb-2 font-semibold text-white/70">Skip interval</p>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {SKIP_PRESETS.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => {
-                            setSkip(s);
-                            setSettingsOpen(false);
-                          }}
-                          className={`rounded py-1.5 font-bold transition ${
-                            skip === s ? "bg-brand text-on-brand" : "bg-white/10 text-white/80 hover:bg-white/20"
-                          }`}
-                        >
-                          {s}s
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  aria-label={fullscreen ? "Exit full screen" : "Full screen"}
-                  title="Fullscreen (F)"
-                  className="rounded-md p-1.5 text-white/90 transition hover:bg-white/10 hover:text-white"
-                >
-                  <FullscreenIcon exit={fullscreen} className="h-5 w-5 sm:h-6 sm:w-6" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Fallback iframe player for external embed providers (Server 2+).
-function Player({ id, mediaType, season, episode, sources, server, onServerChange, title, subtitle, backdrop, logo, onShowTrailer }) {
+// The player with a short cinematic intro.
+//
+// Why no automatic server switching: an iframe's "load" event only fires once the provider's
+// whole page (nested player, ads, scripts) has finished — 20–30s on some servers — even
+// though the video is usually visible after 1–3s. Switching on a timer killed working
+// servers, so we only *suggest* another server when one is genuinely slow.
+//
+// Some providers do tell the embedding page things through postMessage — notably
+// MEDIA_NOT_FOUND (this server doesn't have the title) and VS_DEVTOOLS (the provider shut its
+// player down because developer tools are open). Those are reliable, so we act on them.
+function Player({ sources, server, onServerChange, title, subtitle, backdrop, logo, onShowTrailer }) {
   const [revealed, setRevealed] = useState(false);
   const [overlayGone, setOverlayGone] = useState(false);
   const [slow, setSlow] = useState(false);
@@ -669,7 +120,6 @@ function Player({ id, mediaType, season, episode, sources, server, onServerChang
   const [devtools, setDevtools] = useState(false);
   const iframeRef = useRef(null);
   const src = sources[server];
-  const allMissing = missingOn.length >= sources.length;
 
   // Listen for the provider's own status messages (only from our player frame).
   useEffect(() => {
@@ -694,6 +144,7 @@ function Player({ id, mediaType, season, episode, sources, server, onServerChang
   }, [server]);
 
   // "Not found" on this server → move on to the next one that hasn't said so.
+  const allMissing = missingOn.length >= sources.length;
   useEffect(() => {
     if (!missingOn.includes(server) || allMissing) return undefined;
     const nextUntried = sources.findIndex((_, i) => i > server && !missingOn.includes(i));
@@ -711,11 +162,12 @@ function Player({ id, mediaType, season, episode, sources, server, onServerChang
   }, [notice]);
 
   useEffect(() => {
-    if (src === "native") return undefined;
     setRevealed(false);
     setOverlayGone(false);
     setSlow(false);
     setHintDismissed(false);
+    // Fade the intro out once the provider's player has had time to appear, even if the
+    // page's load event is still pending.
     const reveal = setTimeout(() => setRevealed(true), REVEAL_AFTER_MS);
     const slowTimer = setTimeout(() => setSlow(true), SLOW_HINT_AFTER_MS);
     return () => {
@@ -729,22 +181,6 @@ function Player({ id, mediaType, season, episode, sources, server, onServerChang
     const t = setTimeout(() => setOverlayGone(true), 800);
     return () => clearTimeout(t);
   }, [revealed]);
-
-  if (src === "native" && !missingOn.includes(0)) {
-    return (
-      <NativeStreamPlayer
-        id={id}
-        mediaType={mediaType}
-        season={season}
-        episode={episode}
-        title={title}
-        subtitle={subtitle}
-        backdrop={backdrop}
-        logo={logo}
-        onFallback={() => setMissingOn((prev) => (prev.includes(0) ? prev : [...prev, 0]))}
-      />
-    );
-  }
 
   const handleLoad = () => {
     setSlow(false);
@@ -899,20 +335,11 @@ function Watch() {
   const [server, setServer] = useState(0);
   const [episodeName, setEpisodeName] = useState(null);
 
-  const sources = useMemo(
-    () => ["native", ...getFallbackUrls(id, mediaType, season, episode)],
-    [id, mediaType, season, episode]
-  );
+  const sources = useMemo(() => getFallbackUrls(id, mediaType, season, episode), [id, mediaType, season, episode]);
 
   // Open connections to every server early so switching (and the first load) starts faster.
   useEffect(() => {
-    const origins = [
-      ...new Set(
-        sources
-          .filter((u) => u.startsWith("http"))
-          .map((u) => new URL(u).origin)
-      ),
-    ];
+    const origins = [...new Set(sources.map((u) => new URL(u).origin))];
     const links = origins.map((origin) => {
       const link = document.createElement("link");
       link.rel = "preconnect";
@@ -1026,10 +453,6 @@ function Watch() {
 
       <Player
         key={`${id}-${season}-${episode}`}
-        id={id}
-        mediaType={mediaType}
-        season={season}
-        episode={episode}
         sources={sources}
         server={server}
         onServerChange={setServer}

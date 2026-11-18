@@ -19,7 +19,7 @@ import {
   VolumeOnIcon,
 } from "./Icons";
 
-const DOWNLOADS_KEY = "cinestream:downloads";
+const DOWNLOADS_KEY = "cinestream:mp4-downloads-v2";
 
 const stripTsPadding = (u8) => {
   const limit = Math.min(u8.length - 376, 8192);
@@ -28,7 +28,119 @@ const stripTsPadding = (u8) => {
       return i > 0 ? u8.subarray(i) : u8;
     }
   }
-  return u8;
+  return null;
+};
+
+// Fetch helper that works both via /api/stream and via public CORS gateways if deployed as static SPA.
+const fetchTextWithCorsFallback = async (targetUrl, signal) => {
+  const attempts = [
+    `/api/stream?proxy=${encodeURIComponent(targetUrl)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`,
+  ];
+  for (const url of attempts) {
+    try {
+      const r = await fetch(url, { signal, referrerPolicy: "no-referrer" });
+      if (!r.ok) continue;
+      const text = await r.text();
+      // Reject SPA fallback index.html responses
+      if (text.includes('<div id="root"></div>') || text.includes("/src/main.jsx")) continue;
+      return text;
+    } catch (err) {
+      if (err?.name === "AbortError") throw err;
+    }
+  }
+  throw new Error("Could not reach video stream provider");
+};
+
+const resolveStreamWithFallback = async ({ mediaType, id, season, episode, quality, signal }) => {
+  // 1. Try our /api/stream endpoint first (works on local Vite dev and Vercel functions)
+  try {
+    const params = new URLSearchParams({
+      type: mediaType,
+      id: String(id),
+      s: String(season),
+      e: String(episode),
+      ...(quality ? { quality } : {}),
+    });
+    const r = await fetch(`/api/stream?${params.toString()}`, { signal });
+    const ct = r.headers.get("content-type") || "";
+    if (r.ok && ct.includes("application/json")) {
+      const j = await r.json();
+      if (j?.segments?.length) return j;
+    }
+  } catch (err) {
+    if (err?.name === "AbortError") throw err;
+  }
+
+  // 2. Client-side fallback resolver if /api/stream was intercepted by static SPA routing
+  const embedPath = mediaType === "tv" ? `tv/${id}/${season}/${episode}` : `movie/${id}`;
+  const embedUrl = `https://vidsrc.buzz/embed/${embedPath}`;
+  const html = await fetchTextWithCorsFallback(embedUrl, signal);
+  const qMatch = html.match(/var Q\s*=\s*(\{.*?\});\s*\n/);
+  if (!qMatch) throw new Error("Stream metadata not found for this title");
+  const Q = JSON.parse(qMatch[1]);
+  const servers = [...(Q.ssr?.servers || [])].sort((a, b) => {
+    const score = (srv) => (!srv.lang ? 1 : /english/i.test(srv.lang) ? 0 : 2);
+    return score(a) - score(b);
+  });
+
+  for (const srv of servers) {
+    try {
+      const playUrl = `https://vidsrc.buzz/pl/api.php?a=play&ref=${encodeURIComponent(srv.ref)}&t=${encodeURIComponent(Q.t)}`;
+      const playTxt = await fetchTextWithCorsFallback(playUrl, signal);
+      const playJson = JSON.parse(playTxt);
+      if (!playJson?.url) continue;
+
+      const masterUrl = new URL(playJson.url, "https://vidsrc.buzz").href;
+      let m3u8Text = await fetchTextWithCorsFallback(masterUrl, signal);
+      if (!m3u8Text.includes("#EXTM3U")) continue;
+
+      let qualities = [{ label: "720p HD", height: 720 }];
+      let mediaBaseUrl = masterUrl;
+
+      if (m3u8Text.includes("#EXT-X-STREAM-INF")) {
+        const lines = m3u8Text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const variants = [];
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].startsWith("#EXT-X-STREAM-INF:") && lines[i + 1] && !lines[i + 1].startsWith("#")) {
+            const resMatch = lines[i].match(/RESOLUTION=\d+x(\d+)/i);
+            const height = resMatch ? Number(resMatch[1]) : 720;
+            variants.push({
+              height,
+              label: `${height}p ${height >= 1080 ? "Full HD" : "HD"}`,
+              url: new URL(lines[i + 1], "https://vidsrc.buzz").href,
+            });
+            i += 1;
+          }
+        }
+        if (!variants.length) continue;
+        qualities = variants;
+        const picked = variants[0];
+        mediaBaseUrl = picked.url;
+        m3u8Text = await fetchTextWithCorsFallback(picked.url, signal);
+      }
+
+      const segments = m3u8Text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith("#"))
+        .map((l) => new URL(l, mediaBaseUrl).href);
+
+      if (segments.length > 0) {
+        return {
+          title: Q.title || "",
+          serverName: srv.name,
+          qualities,
+          segments,
+        };
+      }
+    } catch (err) {
+      if (err?.name === "AbortError") throw err;
+    }
+  }
+
+  throw new Error("No downloadable video stream available for this title right now");
 };
 
 const transmuxSegmentsToMp4 = (tsSegments) => {
@@ -230,36 +342,29 @@ export function DownloadButton({
 
   useEffect(() => {
     if (!open || !item?.id) return undefined;
-    let alive = true;
+    const controller = new AbortController();
     setResolving(true);
     setResolveError(null);
-    const params = new URLSearchParams({
-      type: mediaType,
-      id: String(item.id),
-      s: String(season),
-      e: String(episode),
-    });
-    fetch(`/api/stream?${params.toString()}`)
-      .then(async (r) => {
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(j.error || `Failed to resolve video stream (${r.status})`);
-        return j;
-      })
+    resolveStreamWithFallback({
+      mediaType,
+      id: item.id,
+      season,
+      episode,
+      signal: controller.signal,
+    })
       .then((data) => {
-        if (!alive) return;
         setStreamInfo(data);
         if (data.qualities?.[0]?.label) setQuality(data.qualities[0].label);
       })
       .catch((err) => {
-        if (!alive) return;
-        setResolveError(err.message || "Could not resolve video stream");
+        if (err?.name !== "AbortError") {
+          setResolveError(err.message || "Could not resolve video stream");
+        }
       })
       .finally(() => {
-        if (alive) setResolving(false);
+        if (!controller.signal.aborted) setResolving(false);
       });
-    return () => {
-      alive = false;
-    };
+    return () => controller.abort();
   }, [open, item?.id, mediaType, season, episode]);
 
   if (!item?.id) return null;
@@ -303,20 +408,15 @@ export function DownloadButton({
     try {
       let info = streamInfo;
       if (!info?.segments?.length) {
-        const params = new URLSearchParams({
-          type: mediaType,
-          id: String(item.id),
-          s: String(season),
-          e: String(episode),
+        info = await resolveStreamWithFallback({
+          mediaType,
+          id: item.id,
+          season,
+          episode,
           quality,
+          signal: controller.signal,
         });
-        const r = await fetch(`/api/stream?${params.toString()}`, { signal: controller.signal });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j?.segments?.length) {
-          throw new Error(j.error || "No downloadable video stream found for this title");
-        }
-        info = j;
-        setStreamInfo(j);
+        setStreamInfo(info);
       }
 
       const segUrls = info.segments;
@@ -330,24 +430,33 @@ export function DownloadButton({
       const concurrency = 6;
 
       const fetchSegment = async (url) => {
+        // Send no Referer so CDNs with Access-Control-Allow-Origin: * serve the raw MPEG-TS bytes directly
         try {
-          const res = await fetch(url, { signal: controller.signal });
-          if (res.ok) return new Uint8Array(await res.arrayBuffer());
+          const res = await fetch(url, { signal: controller.signal, referrerPolicy: "no-referrer" });
+          const ct = res.headers.get("content-type") || "";
+          if (res.ok && !ct.includes("text/html")) {
+            const clean = stripTsPadding(new Uint8Array(await res.arrayBuffer()));
+            if (clean) return clean;
+          }
         } catch (err) {
           if (err?.name === "AbortError") throw err;
         }
         const proxied = await fetch(`/api/stream?proxy=${encodeURIComponent(url)}`, {
           signal: controller.signal,
         });
-        if (!proxied.ok) throw new Error(`Segment download failed (${proxied.status})`);
-        return new Uint8Array(await proxied.arrayBuffer());
+        const pct = proxied.headers.get("content-type") || "";
+        if (!proxied.ok || pct.includes("text/html")) {
+          throw new Error("Video segment blocked or returned HTML");
+        }
+        const clean = stripTsPadding(new Uint8Array(await proxied.arrayBuffer()));
+        if (!clean) throw new Error("Invalid video segment data");
+        return clean;
       };
 
       const worker = async () => {
         while (cursor < segUrls.length) {
           const idx = cursor++;
-          const raw = await fetchSegment(segUrls[idx]);
-          const clean = stripTsPadding(raw);
+          const clean = await fetchSegment(segUrls[idx]);
           ordered[idx] = clean;
           completed += 1;
           totalBytes += clean.byteLength;
