@@ -600,17 +600,7 @@ function Watch() {
           {episodeLabel && <p className="truncate text-xs text-white/60 md:text-sm">{episodeLabel}</p>}
         </div>
         <ServerMenu count={sources.length} current={server} onChange={setServer} />
-        <a
-          href={buildDownloadUrl(id, mediaType, season, episode)}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={mediaType === "tv" ? `Download S${season}:E${episode}` : "Download"}
-          title={mediaType === "tv" ? `Download S${season}:E${episode}` : "Download"}
-          className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
-        >
-          <DownloadIcon className="h-4 w-4" />
-          <span className="hidden sm:inline">Download</span>
-        </a>
+        <DownloadButton item={item} season={season} episode={episode} variant="topbar" />
         {nextEp && (
           <button
             type="button"
