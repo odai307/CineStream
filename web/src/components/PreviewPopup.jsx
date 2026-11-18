@@ -24,7 +24,7 @@ import {
   PlayButton,
   Score,
 } from "./ui/Controls";
-import { ChevronDownIcon } from "./ui/Icons";
+import { ChevronDownIcon, SkipBackIcon, SkipForwardIcon } from "./ui/Icons";
 
 const SCALE = 1.5;
 const MIN_WIDTH = 330;
@@ -61,6 +61,7 @@ function PreviewCard({ item, rect, onClose }) {
   const [layout] = useState(() => computeLayout(rect));
   const [trailerOn, setTrailerOn] = useState(false);
   const [closing, setClosing] = useState(false);
+  const trailerRef = useRef(null);
 
   const close = () => {
     if (closing) return;
@@ -135,6 +136,7 @@ function PreviewCard({ item, rect, onClose }) {
           />
         )}
         <TrailerPlayer
+          ref={trailerRef}
           videoKey={trailerKey}
           muted={muted}
           loop
@@ -142,7 +144,7 @@ function PreviewCard({ item, rect, onClose }) {
           onPlaying={() => setTrailerOn(true)}
         />
         <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-surface via-surface/30 to-transparent" />
-        <div className="absolute bottom-3 left-4 right-16">
+        <div className="absolute bottom-3 left-4 right-28">
           {logoPath ? (
             <img
               src={getLogoUrl(logoPath)}
@@ -156,7 +158,35 @@ function PreviewCard({ item, rect, onClose }) {
           )}
         </div>
       </button>
-      {trailerKey && <MuteButton size="sm" className="absolute bottom-3 right-3" />}
+      {trailerKey && (
+        <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
+          {trailerOn && (
+            <>
+              <CircleButton
+                size="sm"
+                label="Rewind 10 seconds"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  trailerRef.current?.seekBy(-10);
+                }}
+              >
+                <SkipBackIcon seconds={10} />
+              </CircleButton>
+              <CircleButton
+                size="sm"
+                label="Fast-forward 10 seconds"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  trailerRef.current?.seekBy(10);
+                }}
+              >
+                <SkipForwardIcon seconds={10} />
+              </CircleButton>
+            </>
+          )}
+          <MuteButton size="sm" />
+        </div>
+      )}
       </div>
 
       <div className="space-y-3 p-4">

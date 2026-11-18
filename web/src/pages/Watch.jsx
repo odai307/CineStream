@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import EpisodeList from "../components/EpisodeList";
 import Row from "../components/Row";
@@ -16,6 +16,8 @@ import {
   PlayIcon,
   ReplayIcon,
   ServerIcon,
+  SkipBackIcon,
+  SkipForwardIcon,
 } from "../components/ui/Icons";
 import TrailerTheater from "../components/TrailerTheater";
 import { useLibrary } from "../context/LibraryContext";
@@ -32,6 +34,10 @@ import {
   getYear,
 } from "../lib/tmdb";
 import { watchPath } from "../lib/routes";
+import { readJSON } from "../lib/storage";
+
+const SKIP_KEY = "cinestream:skip-seconds";
+const HIDE_SKIP_AFTER_MS = 2800;
 
 // Hide the intro after this long even if the provider page is still loading in the background.
 const REVEAL_AFTER_MS = 4000;
@@ -120,8 +126,86 @@ function Player({ sources, server, onServerChange, title, subtitle, backdrop, lo
   const [notice, setNotice] = useState(null);
   const [missingOn, setMissingOn] = useState([]); // servers that reported "not found"
   const [devtools, setDevtools] = useState(false);
+  const [showSkipControls, setShowSkipControls] = useState(true);
+  const [flash, setFlash] = useState(null);
+  const [skip] = useState(() => {
+    const saved = Number(readJSON(SKIP_KEY, 10));
+    return saved >= 1 && saved <= 300 ? saved : 10;
+  });
   const iframeRef = useRef(null);
+  const currentTimeRef = useRef(0);
+  const hideSkipTimer = useRef(null);
   const src = sources[server];
+
+  const pokeSkipControls = useCallback(() => {
+    setShowSkipControls(true);
+    clearTimeout(hideSkipTimer.current);
+    hideSkipTimer.current = setTimeout(() => setShowSkipControls(false), HIDE_SKIP_AFTER_MS);
+  }, []);
+
+  useEffect(() => {
+    const onActivity = () => pokeSkipControls();
+    window.addEventListener("pointermove", onActivity, { passive: true });
+    window.addEventListener("touchstart", onActivity, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", onActivity);
+      window.removeEventListener("touchstart", onActivity);
+      clearTimeout(hideSkipTimer.current);
+    };
+  }, [pokeSkipControls]);
+
+  const seekBy = useCallback(
+    (delta) => {
+      const target = Math.max(0, (currentTimeRef.current || 0) + delta);
+      currentTimeRef.current = target;
+      const win = iframeRef.current?.contentWindow;
+      if (win) {
+        const rel = delta > 0 ? `+${delta}` : `${delta}`;
+        // Support PlayerJS, VidSrc, Plyr, Video.js, and standard postMessage seek protocols.
+        win.postMessage({ api: "seek", set: rel }, "*");
+        win.postMessage(JSON.stringify({ api: "seek", set: rel }), "*");
+        win.postMessage({ api: "seek", set: target }, "*");
+        win.postMessage(JSON.stringify({ method: "seek", value: target }), "*");
+        win.postMessage(JSON.stringify({ method: "setCurrentTime", value: target }), "*");
+        win.postMessage(JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }), "*");
+        win.postMessage(JSON.stringify({ event: "command", func: "seekBy", args: [delta] }), "*");
+        win.postMessage({ type: "seek", time: target, delta }, "*");
+        win.postMessage({ action: "seek", value: target, delta }, "*");
+      }
+      const seconds = Math.abs(delta);
+      setFlash({
+        side: delta < 0 ? "left" : "right",
+        seconds,
+        text: `${delta < 0 ? "−" : "+"}${seconds}s`,
+        id: Date.now(),
+      });
+      pokeSkipControls();
+    },
+    [pokeSkipControls]
+  );
+
+  useEffect(() => {
+    if (!flash) return undefined;
+    const t = setTimeout(() => setFlash(null), 650);
+    return () => clearTimeout(t);
+  }, [flash]);
+
+  // Keyboard ← / → or J / L to skip when focus is on the Watch page.
+  useEffect(() => {
+    if (!revealed || allMissing || devtools) return undefined;
+    const onKey = (e) => {
+      if (e.target?.tagName === "INPUT" || e.target?.tagName === "SELECT" || e.target?.tagName === "TEXTAREA") return;
+      if (e.key === "ArrowLeft" || e.key?.toLowerCase() === "j") {
+        e.preventDefault();
+        seekBy(-skip);
+      } else if (e.key === "ArrowRight" || e.key?.toLowerCase() === "l") {
+        e.preventDefault();
+        seekBy(skip);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [revealed, allMissing, devtools, seekBy, skip]);
 
   // Listen for the provider's own status messages (only from our player frame).
   useEffect(() => {
@@ -135,6 +219,18 @@ function Player({ sources, server, onServerChange, title, subtitle, backdrop, lo
           return;
         }
       }
+      const reportedTime =
+        typeof data?.currentTime === "number"
+          ? data.currentTime
+          : typeof data?.data?.currentTime === "number"
+          ? data.data.currentTime
+          : data?.event === "time" && typeof data?.value === "number"
+          ? data.value
+          : typeof data?.info?.currentTime === "number"
+          ? data.info.currentTime
+          : null;
+      if (reportedTime !== null) currentTimeRef.current = reportedTime;
+
       if (data?.type === "MEDIA_NOT_FOUND") {
         setMissingOn((prev) => (prev.includes(server) ? prev : [...prev, server]));
       } else if (data?.type === "VS_DEVTOOLS") {
@@ -241,6 +337,60 @@ function Player({ sources, server, onServerChange, title, subtitle, backdrop, lo
             </p>
           </div>
         </div>
+      )}
+
+      {revealed && !allMissing && !devtools && (
+        <>
+          {flash && (
+            <div
+              key={flash.id}
+              className={`pointer-events-none absolute top-1/2 z-20 flex -translate-y-1/2 animate-pop-in flex-col items-center gap-1 rounded-full bg-black/60 px-5 py-4 text-white backdrop-blur-sm [--from-scale:0.7] ${
+                flash.side === "left" ? "left-[14%]" : "right-[14%]"
+              }`}
+            >
+              {flash.side === "left" ? (
+                <SkipBackIcon seconds={flash.seconds} className="h-10 w-10" />
+              ) : (
+                <SkipForwardIcon seconds={flash.seconds} className="h-10 w-10" />
+              )}
+              <span className="text-sm font-bold">{flash.text}</span>
+            </div>
+          )}
+
+          {/* Netflix-style floating skip back / skip forward controls */}
+          <div
+            className={`pointer-events-none absolute inset-y-0 inset-x-0 z-15 flex items-center justify-between px-3 transition-opacity duration-300 sm:px-6 ${
+              showSkipControls ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => seekBy(-skip)}
+              onMouseEnter={() => {
+                clearTimeout(hideSkipTimer.current);
+                setShowSkipControls(true);
+              }}
+              aria-label={`Rewind ${skip} seconds`}
+              title={`Rewind ${skip} seconds (←)`}
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/55 text-white/90 shadow-lg backdrop-blur-md transition hover:scale-110 hover:border-white hover:bg-black/80 hover:text-white sm:h-14 sm:w-14"
+            >
+              <SkipBackIcon seconds={skip} className="h-7 w-7 sm:h-9 sm:w-9" />
+            </button>
+            <button
+              type="button"
+              onClick={() => seekBy(skip)}
+              onMouseEnter={() => {
+                clearTimeout(hideSkipTimer.current);
+                setShowSkipControls(true);
+              }}
+              aria-label={`Fast-forward ${skip} seconds`}
+              title={`Fast-forward ${skip} seconds (→)`}
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/55 text-white/90 shadow-lg backdrop-blur-md transition hover:scale-110 hover:border-white hover:bg-black/80 hover:text-white sm:h-14 sm:w-14"
+            >
+              <SkipForwardIcon seconds={skip} className="h-7 w-7 sm:h-9 sm:w-9" />
+            </button>
+          </div>
+        </>
       )}
 
       {notice && (

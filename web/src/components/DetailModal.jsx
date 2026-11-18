@@ -28,7 +28,7 @@ import {
   PrimaryPlay,
   Score,
 } from "./ui/Controls";
-import { CheckIcon, CloseIcon, FilmIcon, PlayIcon, ReplayIcon, ShareIcon, VolumeOffIcon, VolumeOnIcon } from "./ui/Icons";
+import { CheckIcon, CloseIcon, FilmIcon, PlayIcon, ReplayIcon, ShareIcon, SkipBackIcon, SkipForwardIcon, VolumeOffIcon, VolumeOnIcon } from "./ui/Icons";
 
 function SimilarCard({ item }) {
   const { openModal } = useMedia();
@@ -100,6 +100,7 @@ function ModalContent({ id, mediaType, onClose, onRetry }) {
   const [showAllSimilar, setShowAllSimilar] = useState(false);
   const [theaterOpen, setTheaterOpen] = useState(false);
   const panelRef = useRef(null);
+  const trailerRef = useRef(null);
 
   useEffect(() => {
     panelRef.current?.focus();
@@ -183,6 +184,7 @@ function ModalContent({ id, mediaType, onClose, onRetry }) {
           <img src={getBackdropUrl(details.backdrop_path)} alt="" className="absolute inset-0 h-full w-full object-cover" />
         )}
         <TrailerPlayer
+          ref={trailerRef}
           key={`${trailerKey}-${replay}`}
           videoKey={trailerKey}
           muted={muted}
@@ -239,9 +241,21 @@ function ModalContent({ id, mediaType, onClose, onRetry }) {
                 <ReplayIcon />
               </CircleButton>
             ) : (
-              <CircleButton label={muted ? "Unmute" : "Mute"} onClick={() => setMuted((m) => !m)}>
-                {muted ? <VolumeOffIcon /> : <VolumeOnIcon />}
-              </CircleButton>
+              <div className="flex items-center gap-2">
+                {trailerState === "playing" && (
+                  <>
+                    <CircleButton label="Rewind 10 seconds" onClick={() => trailerRef.current?.seekBy(-10)}>
+                      <SkipBackIcon seconds={10} />
+                    </CircleButton>
+                    <CircleButton label="Fast-forward 10 seconds" onClick={() => trailerRef.current?.seekBy(10)}>
+                      <SkipForwardIcon seconds={10} />
+                    </CircleButton>
+                  </>
+                )}
+                <CircleButton label={muted ? "Unmute" : "Mute"} onClick={() => setMuted((m) => !m)}>
+                  {muted ? <VolumeOffIcon /> : <VolumeOnIcon />}
+                </CircleButton>
+              </div>
             ))}
         </div>
       </div>

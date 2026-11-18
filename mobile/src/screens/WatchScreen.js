@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { getDetailsByType, getTVEpisodes, getTVSeasons } from "../lib/tmdb";
@@ -7,6 +7,7 @@ import { getDownloadUrl, getEmbedUrl } from "../lib/vidsrc";
 function WatchScreen({ route }) {
   const { id, mediaType = "movie", title: routeTitle } = route.params;
 
+  const webViewRef = useRef(null);
   const [details, setDetails] = useState(null);
   const [seasons, setSeasons] = useState([]);
   const [episodes, setEpisodes] = useState([]);
@@ -69,6 +70,25 @@ function WatchScreen({ route }) {
 
   const title = details?.title || details?.name || routeTitle || "Watch";
 
+  const seekBy = (delta) => {
+    const rel = delta > 0 ? `+${delta}` : `${delta}`;
+    webViewRef.current?.injectJavaScript(`
+      (function() {
+        var v = document.querySelector('video');
+        if (v) { v.currentTime = Math.max(0, v.currentTime + (${delta})); }
+        window.postMessage({ api: 'seek', set: '${rel}' }, '*');
+        var frames = document.querySelectorAll('iframe');
+        for (var i = 0; i < frames.length; i++) {
+          try {
+            frames[i].contentWindow.postMessage({ api: 'seek', set: '${rel}' }, '*');
+            frames[i].contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekBy', args: [${delta}] }), '*');
+          } catch (e) {}
+        }
+      })();
+      true;
+    `);
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -107,6 +127,7 @@ function WatchScreen({ route }) {
 
       <View style={styles.playerWrap}>
         <WebView
+          ref={webViewRef}
           source={{ uri: embedUrl }}
           allowsFullscreenVideo
           javaScriptEnabled
@@ -114,6 +135,22 @@ function WatchScreen({ route }) {
           mediaPlaybackRequiresUserAction={false}
           style={styles.webview}
         />
+        <View style={styles.skipOverlay} pointerEvents="box-none">
+          <Pressable
+            onPress={() => seekBy(-10)}
+            style={styles.skipBtn}
+            accessibilityLabel="Rewind 10 seconds"
+          >
+            <Text style={styles.skipBtnText}>↺ 10</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => seekBy(10)}
+            style={styles.skipBtn}
+            accessibilityLabel="Fast-forward 10 seconds"
+          >
+            <Text style={styles.skipBtnText}>10 ↻</Text>
+          </Pressable>
+        </View>
       </View>
 
       {mediaType === "tv" && seasons.length > 0 && (
@@ -205,6 +242,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   playerWrap: {
+    position: "relative",
     borderRadius: 12,
     overflow: "hidden",
     backgroundColor: "#141414",
@@ -212,6 +250,29 @@ const styles = StyleSheet.create({
   },
   webview: {
     backgroundColor: "#141414",
+  },
+  skipOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 12,
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  skipBtn: {
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.35)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  skipBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
   },
   selectorBlock: {
     marginTop: 18,

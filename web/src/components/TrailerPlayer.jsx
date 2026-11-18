@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { SkipBackIcon, SkipForwardIcon } from "./ui/Icons";
 
 // Chrome-less, muted-autoplay YouTube trailer used as a background video.
 // Talks to the player through the IFrame API's postMessage protocol (no script tag needed).
@@ -6,20 +7,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const ORIGINS = ["https://www.youtube-nocookie.com", "https://www.youtube.com"];
 
-function TrailerPlayer({
-  videoKey,
-  muted = true,
-  playing = true,
-  loop = false,
-  startDelay = 0,
-  onPlaying,
-  onEnded,
-  className = "",
-}) {
+const TrailerPlayer = forwardRef(function TrailerPlayer(
+  {
+    videoKey,
+    muted = true,
+    playing = true,
+    loop = false,
+    startDelay = 0,
+    onPlaying,
+    onEnded,
+    className = "",
+  },
+  ref
+) {
   const iframeRef = useRef(null);
+  const currentTimeRef = useRef(0);
+  const durationRef = useRef(0);
   const [ready, setReady] = useState(false);
   const [visible, setVisible] = useState(false);
   const [started, setStarted] = useState(startDelay === 0);
+  const [flash, setFlash] = useState(null);
   const callbacks = useRef({ onPlaying, onEnded });
   callbacks.current = { onPlaying, onEnded };
 
@@ -28,6 +35,32 @@ function TrailerPlayer({
     if (!win) return;
     win.postMessage(JSON.stringify({ event: "command", func, args }), "*");
   }, []);
+
+  const seekBy = useCallback(
+    (delta) => {
+      const cur = currentTimeRef.current || 0;
+      const dur = durationRef.current || 0;
+      const next = dur > 0 ? Math.min(Math.max(0, cur + delta), dur) : Math.max(0, cur + delta);
+      currentTimeRef.current = next;
+      command("seekTo", [next, true]);
+      const seconds = Math.abs(delta);
+      setFlash({
+        side: delta < 0 ? "left" : "right",
+        seconds,
+        text: `${delta < 0 ? "−" : "+"}${seconds}s`,
+        id: Date.now(),
+      });
+    },
+    [command]
+  );
+
+  useImperativeHandle(ref, () => ({ seekBy }), [seekBy]);
+
+  useEffect(() => {
+    if (!flash) return undefined;
+    const t = setTimeout(() => setFlash(null), 650);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   // Delay mounting the iframe (hero waits a beat on the artwork, like Netflix).
   useEffect(() => {
@@ -40,6 +73,8 @@ function TrailerPlayer({
   useEffect(() => {
     setReady(false);
     setVisible(false);
+    currentTimeRef.current = 0;
+    durationRef.current = 0;
   }, [videoKey]);
 
   useEffect(() => {
@@ -53,6 +88,12 @@ function TrailerPlayer({
         return;
       }
       if (data?.event === "onReady") setReady(true);
+      if (typeof data?.info?.currentTime === "number") {
+        currentTimeRef.current = data.info.currentTime;
+      }
+      if (typeof data?.info?.duration === "number" && data.info.duration > 0) {
+        durationRef.current = data.info.duration;
+      }
       const state =
         data?.event === "onStateChange" ? data.info : data?.info?.playerState;
       if (state === 1) {
@@ -141,8 +182,23 @@ function TrailerPlayer({
         style={{ width: "max(135cqw, 240cqh)", height: "max(135cqh, 75.94cqw)" }}
         className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 border-0"
       />
+      {flash && (
+        <div
+          key={flash.id}
+          className={`pointer-events-none absolute top-1/2 z-10 flex -translate-y-1/2 animate-pop-in flex-col items-center gap-1 rounded-full bg-black/55 px-4 py-3 text-white backdrop-blur-sm [--from-scale:0.7] ${
+            flash.side === "left" ? "left-[12%]" : "right-[12%]"
+          }`}
+        >
+          {flash.side === "left" ? (
+            <SkipBackIcon seconds={flash.seconds} className="h-8 w-8 sm:h-10 sm:w-10" />
+          ) : (
+            <SkipForwardIcon seconds={flash.seconds} className="h-8 w-8 sm:h-10 sm:w-10" />
+          )}
+          <span className="text-xs font-bold sm:text-sm">{flash.text}</span>
+        </div>
+      )}
     </div>
   );
-}
+});
 
 export default TrailerPlayer;

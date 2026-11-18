@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMedia } from "../context/MediaContext";
 import { useLibrary } from "../context/LibraryContext";
 import useInView from "../hooks/useInView";
@@ -15,7 +15,7 @@ import {
 import { resumePath } from "../lib/routes";
 import TrailerPlayer from "./TrailerPlayer";
 import { CircleButton, MaturityBadge, PrimaryPlay, Score } from "./ui/Controls";
-import { InfoIcon, ReplayIcon, VolumeOffIcon, VolumeOnIcon } from "./ui/Icons";
+import { InfoIcon, ReplayIcon, SkipBackIcon, SkipForwardIcon, VolumeOffIcon, VolumeOnIcon } from "./ui/Icons";
 
 const useDocumentVisible = () => {
   const [visible, setVisible] = useState(!document.hidden);
@@ -57,6 +57,7 @@ function Hero({ fetcher }) {
   const [trailerState, setTrailerState] = useState("idle"); // idle | playing | ended
   const [calm, setCalm] = useState(false);
   const [replayCount, setReplayCount] = useState(0);
+  const trailerRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
@@ -127,6 +128,7 @@ function Hero({ fetcher }) {
       </picture>
 
       <TrailerPlayer
+        ref={trailerRef}
         key={`${trailerKey}-${replayCount}`}
         videoKey={trailerKey}
         muted={muted}
@@ -192,17 +194,29 @@ function Hero({ fetcher }) {
         </div>
       </div>
 
-      {/* Right rail: mute / replay + maturity rating */}
-      <div className="absolute bottom-[20%] right-0 z-10 flex items-center gap-3 md:bottom-[28%]">
+      {/* Right rail: skip back / skip forward / mute / replay + maturity rating */}
+      <div className="absolute bottom-[20%] right-0 z-10 flex items-center gap-2.5 md:bottom-[28%]">
         {trailerKey &&
           (trailerState === "ended" ? (
             <CircleButton label="Replay trailer" size="lg" onClick={replay}>
               <ReplayIcon />
             </CircleButton>
           ) : (
-            <CircleButton label={muted ? "Unmute" : "Mute"} size="lg" onClick={() => setMuted((m) => !m)}>
-              {muted ? <VolumeOffIcon /> : <VolumeOnIcon />}
-            </CircleButton>
+            <>
+              {trailerState === "playing" && (
+                <>
+                  <CircleButton label="Rewind 10 seconds" size="lg" onClick={() => trailerRef.current?.seekBy(-10)}>
+                    <SkipBackIcon seconds={10} />
+                  </CircleButton>
+                  <CircleButton label="Fast-forward 10 seconds" size="lg" onClick={() => trailerRef.current?.seekBy(10)}>
+                    <SkipForwardIcon seconds={10} />
+                  </CircleButton>
+                </>
+              )}
+              <CircleButton label={muted ? "Unmute" : "Mute"} size="lg" onClick={() => setMuted((m) => !m)}>
+                {muted ? <VolumeOffIcon /> : <VolumeOnIcon />}
+              </CircleButton>
+            </>
           ))}
         {certification && (
           <span className="border-l-[3px] border-white/80 bg-black/40 py-1.5 pl-3 pr-[max(24px,5vw)] text-sm font-medium backdrop-blur-sm">
