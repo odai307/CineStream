@@ -145,6 +145,7 @@ function Player({ sources, server, onServerChange, title, subtitle, backdrop, lo
   const currentTimeRef = useRef(0);
   const hideSkipTimer = useRef(null);
   const src = sources[server];
+  const allMissing = missingOn.length >= sources.length;
 
   const pokeSkipControls = useCallback(() => {
     setShowSkipControls(true);
@@ -251,7 +252,6 @@ function Player({ sources, server, onServerChange, title, subtitle, backdrop, lo
   }, [server]);
 
   // "Not found" on this server → move on to the next one that hasn't said so.
-  const allMissing = missingOn.length >= sources.length;
   useEffect(() => {
     if (!missingOn.includes(server) || allMissing) return undefined;
     const nextUntried = sources.findIndex((_, i) => i > server && !missingOn.includes(i));
